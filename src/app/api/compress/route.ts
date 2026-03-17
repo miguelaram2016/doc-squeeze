@@ -1,11 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ILovePDFApi from '@ilovepdf/ilovepdf-js';
-import ILovePDFFile from '@ilovepdf/ilovepdf-js/ILovePDFFile';
-
-// Polyfill XMLHttpRequest for server-side usage
-if (typeof global.XMLHttpRequest === 'undefined') {
-  global.XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,33 +38,93 @@ export async function POST(request: NextRequest) {
     };
     const compressionLevel = compressionMap[level] || 'medium';
 
-    // Initialize iLovePDF
-    const instance = new ILovePDFApi(apiKey);
-    const task = instance.newTask('compress');
+    // Convert file to base64
+    const arrayBuffer = await file.arrayBuffer();
+    const base64File = Buffer.from(arrayBuffer).toString('base64');
 
-    // Start the task
-    await task.start();
+    // iLovePDF REST API - Create task
+    // Step 1: Create a new compress task
+    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/compress', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-    // Add the file using ILovePDFFile
-    const iloveFile = new ILovePDFFile(file);
-    await task.addFile(iloveFile);
+    if (!createTaskResponse.ok) {
+      const errText = await createTaskResponse.text();
+      console.error('Create task error:', errText);
+      throw new Error(`Failed to create task: ${errText}`);
+    }
 
-    // Process with compression level
-    await task.process({ compression_level: compressionLevel });
+    const taskData = await createTaskResponse.json();
+    console.log('Task created:', taskData);
 
-    // Download the result
-    const data = await task.download();
+    // Step 2: Upload the file
+    const uploadResponse = await fetch(taskData.server + '/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        task: taskData.task,
+        file: base64File,
+        filename: file.name,
+      }),
+    });
 
-    // Convert ArrayBuffer to Uint8Array
-    const uint8Array = new Uint8Array(data);
-    
-    // Create blob
-    const blob = new Blob([uint8Array], { type: 'application/pdf' });
+    if (!uploadResponse.ok) {
+      const errText = await uploadResponse.text();
+      console.error('Upload error:', errText);
+      throw new Error(`Failed to upload file: ${errText}`);
+    }
 
-    return new NextResponse(blob, {
+    const uploadData = await uploadResponse.json();
+    console.log('File uploaded:', uploadData);
+
+    // Step 3: Process the file
+    const processResponse = await fetch(taskData.server + '/process', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        task: taskData.task,
+        compression_level: compressionLevel,
+      }),
+    });
+
+    if (!processResponse.ok) {
+      const errText = await processResponse.text();
+      console.error('Process error:', errText);
+      throw new Error(`Failed to process file: ${errText}`);
+    }
+
+    const processData = await processResponse.json();
+    console.log('Processing complete:', processData);
+
+    // Step 4: Download the result
+    const downloadResponse = await fetch(taskData.server + '/download/' + taskData.task, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!downloadResponse.ok) {
+      const errText = await downloadResponse.text();
+      console.error('Download error:', errText);
+      throw new Error(`Failed to download result: ${errText}`);
+    }
+
+    const resultBuffer = await downloadResponse.arrayBuffer();
+
+    return new NextResponse(resultBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="compressed.pdf"`,
+        'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
       },
     });
   } catch (error) {
@@ -79,10 +132,9 @@ export async function POST(request: NextRequest) {
     
     // More detailed error message
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Detailed error:', errorMessage);
     
     return NextResponse.json(
-      { error: 'Failed to compress PDF. Please check your API key and try again. ' + errorMessage },
+      { error: 'Failed to compress PDF. ' + errorMessage },
       { status: 500 }
     );
   }
