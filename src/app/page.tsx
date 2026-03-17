@@ -38,7 +38,6 @@ export default function Home() {
   const [appState, setAppState] = useState<AppState>('upload');
   const [file, setFile] = useState<FileInfo | null>(null);
   const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
-  const [compressionQuality, setCompressionQuality] = useState<number>(70);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<CompressionResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -126,7 +125,6 @@ export default function Home() {
         throw new Error('No file selected');
       }
       formData.append('level', compressionLevel);
-      formData.append('quality', compressionQuality.toString());
 
       const response = await fetch('/api/compress', {
         method: 'POST',
@@ -335,28 +333,6 @@ export default function Home() {
                     </Select>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       {getCompressionDescription(compressionLevel)}
-                    </p>
-                  </div>
-
-                  {/* Quality Slider (for fine-tuning) */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Quality</Label>
-                      <span className="text-sm font-medium text-violet-600 dark:text-violet-400">{compressionQuality}%</span>
-                    </div>
-                    <Slider
-                      value={[compressionQuality]}
-                      onValueChange={(val) => {
-                        const v = Array.isArray(val) ? val[0] : val;
-                        setCompressionQuality(v);
-                      }}
-                      max={100}
-                      min={20}
-                      step={5}
-                      className="py-2"
-                    />
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Lower quality = smaller file size
                     </p>
                   </div>
 
