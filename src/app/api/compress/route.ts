@@ -23,6 +23,9 @@ export async function POST(request: NextRequest) {
     // Get API key from environment
     const apiKey = process.env.ILOVEPDF_API_KEY;
     
+    console.log('API Key present:', !!apiKey);
+    console.log('API Key value:', apiKey ? apiKey.substring(0, 10) + '...' : 'missing');
+    
     if (!apiKey) {
       return NextResponse.json(
         { error: 'API key not configured. Please set ILOVEPDF_API_KEY environment variable.' },
@@ -38,12 +41,12 @@ export async function POST(request: NextRequest) {
     };
     const compressionLevel = compressionMap[level] || 'medium';
 
-    // Convert file to base64
+    // Get file buffer
     const arrayBuffer = await file.arrayBuffer();
-    const base64File = Buffer.from(arrayBuffer).toString('base64');
 
     // iLovePDF REST API - Create task
     // Step 1: Create a new compress task
+    console.log('Creating task...');
     const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/work', {
       method: 'POST',
       headers: {
@@ -53,6 +56,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ tool: 'compress' }),
     });
 
+    console.log('Create task status:', createTaskResponse.status, createTaskResponse.statusText);
+    
     if (!createTaskResponse.ok) {
       const errText = await createTaskResponse.text();
       console.error('Create task error:', errText);
@@ -60,20 +65,25 @@ export async function POST(request: NextRequest) {
     }
 
     const taskData = await createTaskResponse.json();
-    console.log('Task created:', taskData);
+    console.log('Task created:', JSON.stringify(taskData));
 
-    // Step 2: Upload the file
-    const uploadResponse = await fetch(taskData.server + '/upload', {
+    // Step 2: Upload the file using FormData
+    const uploadUrl = taskData.server + '/upload';
+    console.log('Upload URL:', uploadUrl);
+    
+    const uploadFormData = new FormData();
+    uploadFormData.append('task', taskData.task);
+    uploadFormData.append('file', new Blob([arrayBuffer]), file.name);
+    
+    const uploadResponse = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        task: taskData.task,
-        file: base64File,
-        filename: file.name,
-      }),
+      body: uploadFormData,
     });
+
+    console.log('Upload status:', uploadResponse.status, uploadResponse.statusText);
 
     if (!uploadResponse.ok) {
       const errText = await uploadResponse.text();
@@ -82,10 +92,12 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadData = await uploadResponse.json();
-    console.log('File uploaded:', uploadData);
+    console.log('File uploaded:', JSON.stringify(uploadData));
 
     // Step 3: Process the file
-    const processResponse = await fetch(taskData.server + '/process', {
+    const processUrl = taskData.server + '/process';
+    console.log('Process URL:', processUrl);
+    const processResponse = await fetch(processUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
