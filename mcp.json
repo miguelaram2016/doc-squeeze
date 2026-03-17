@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "icons": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-icons"],
+      "env": {}
+    }
+  }
+}
