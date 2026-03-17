@@ -45,15 +45,16 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
 
     // iLovePDF REST API - Create task
-    // Step 1: Create a new compress task
+    // Try different endpoint formats
     console.log('Creating task...');
-    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/work', {
+    
+    // Try the correct API endpoint - based on iLovePDF API structure
+    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ tool: 'compress' }),
     });
 
     console.log('Create task status:', createTaskResponse.status, createTaskResponse.statusText);
