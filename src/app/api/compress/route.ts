@@ -44,12 +44,13 @@ export async function POST(request: NextRequest) {
 
     // iLovePDF REST API - Create task
     // Step 1: Create a new compress task
-    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/compress', {
+    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/work', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ tool: 'compress' }),
     });
 
     if (!createTaskResponse.ok) {
