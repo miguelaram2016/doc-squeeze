@@ -71,8 +71,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Compression error:', error);
+    
+    // More detailed error message
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Detailed error:', errorMessage);
+    
     return NextResponse.json(
-      { error: 'Failed to compress PDF. Please check your API key and try again.' },
+      { error: 'Failed to compress PDF. Please check your API key and try again. ' + errorMessage },
       { status: 500 }
     );
   }
