@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster, toast } from 'sonner';
 
 type CompressionLevel = 'low' | 'medium' | 'high';
 type AppState = 'upload' | 'processing' | 'result';
@@ -42,7 +42,29 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<CompressionResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle dark mode
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Check for API key on mount
+  useEffect(() => {
+    const checkApiKey = async () => {
+      try {
+        const res = await fetch('/api/compress', { method: 'HEAD' });
+      } catch (e) {
+        // Ignore
+      }
+    };
+    checkApiKey();
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -97,12 +119,11 @@ export default function Home() {
 
     try {
       const formData = new FormData();
-      const fileToUpload = new File([new ArrayBuffer(file.size)], file.name, { type: 'application/pdf' });
-      
-      // We need to get the actual file from input
       const fileInput = fileInputRef.current;
       if (fileInput?.files?.[0]) {
         formData.append('file', fileInput.files[0]);
+      } else {
+        throw new Error('No file selected');
       }
       formData.append('level', compressionLevel);
       formData.append('quality', compressionQuality.toString());
@@ -113,7 +134,8 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error('Compression failed');
+        const errorData = await response.json().catch(() => ({ error: 'Compression failed' }));
+        throw new Error(errorData.error || 'Compression failed');
       }
 
       const blob = await response.blob();
@@ -134,6 +156,7 @@ export default function Home() {
       console.error('Compression error:', error);
       clearInterval(progressInterval);
       setAppState('upload');
+      toast.error(error instanceof Error ? error.message : 'Failed to compress PDF. Please check your API key.');
     }
   };
 
@@ -190,6 +213,14 @@ export default function Home() {
               <p className="text-xs text-slate-500 dark:text-slate-400">Smart PDF Compression</p>
             </div>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDarkMode(!darkMode)}
+            className="rounded-full"
+          >
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </Button>
         </div>
       </header>
 

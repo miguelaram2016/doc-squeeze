@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PDFDocument } from 'pdf-lib';
+import ILovePDFApi from '@ilovepdf/ilovepdf-js';
+import ILovePDFFile from '@ilovepdf/ilovepdf-js/ILovePDFFile';
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const level = formData.get('level') as string || 'medium';
-    const quality = parseInt(formData.get('quality') as string || '70', 10);
 
     if (!file) {
       return NextResponse.json(
@@ -22,34 +22,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Read the file
-    const arrayBuffer = await file.arrayBuffer();
+    // Get API key from environment
+    const apiKey = process.env.ILOVEPDF_API_KEY;
     
-    // Load PDF
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    
-    // Get all pages
-    const pages = pdfDoc.getPages();
-    
-    // Compression is limited in pdf-lib, but we can:
-    // 1. Remove unused objects
-    // 2. Flatten forms
-    // 3. Compress images if present
-    
-    // For now, we'll do basic optimization
-    // In production, you'd use a more robust solution
-    
-    // Save with compression options
-    // Note: pdf-lib's save options are limited
-    // The actual compression ratio depends on the PDF content
-    
-    const compressedPdf = await pdfDoc.save({
-      useObjectStreams: true,
-    });
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key not configured. Please set ILOVEPDF_API_KEY environment variable.' },
+        { status: 500 }
+      );
+    }
 
-    // Create blob - copy to ensure proper ArrayBuffer
-    const pdfBuffer = new Uint8Array(compressedPdf);
-    const blob = new Blob([pdfBuffer.buffer], { type: 'application/pdf' });
+    // Map compression levels to iLovePDF values
+    const compressionMap: Record<string, string> = {
+      'low': 'low',
+      'medium': 'medium', 
+      'high': 'extreme'
+    };
+    const compressionLevel = compressionMap[level] || 'medium';
+
+    // Initialize iLovePDF
+    const instance = new ILovePDFApi(apiKey);
+    const task = instance.newTask('compress');
+
+    // Start the task
+    await task.start();
+
+    // Add the file using ILovePDFFile
+    const iloveFile = new ILovePDFFile(file);
+    await task.addFile(iloveFile);
+
+    // Process with compression level
+    await task.process({ compression_level: compressionLevel });
+
+    // Download the result
+    const data = await task.download();
+
+    // Convert ArrayBuffer to Uint8Array
+    const uint8Array = new Uint8Array(data);
+    
+    // Create blob
+    const blob = new Blob([uint8Array], { type: 'application/pdf' });
 
     return new NextResponse(blob, {
       headers: {
@@ -60,7 +72,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Compression error:', error);
     return NextResponse.json(
-      { error: 'Failed to compress PDF' },
+      { error: 'Failed to compress PDF. Please check your API key and try again.' },
       { status: 500 }
     );
   }
