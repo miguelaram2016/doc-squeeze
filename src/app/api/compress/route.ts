@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import ILovePDFApi from '@ilovepdf/ilovepdf-js';
 import ILovePDFFile from '@ilovepdf/ilovepdf-js/ILovePDFFile';
 
+// Polyfill XMLHttpRequest for server-side usage
+if (typeof global.XMLHttpRequest === 'undefined') {
+  global.XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
