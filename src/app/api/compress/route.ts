@@ -39,17 +39,20 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Using iLovePDF API with compression level:', compressionLevel);
+    console.log('Public key:', ILOVEPDF_PUBLIC_KEY?.substring(0, 20) + '...');
 
-    // Try iLovePDF REST API with direct key authentication
-    // Step 1: Start task
+    // Try iLovePDF REST API - let's try the simplest approach first
+    // Step 1: Start task with just public key as Bearer token
     const startResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ILOVEPDF_PUBLIC_KEY}:${ILOVEPDF_SECRET_KEY}`,
+        'Authorization': `Bearer ${ILOVEPDF_PUBLIC_KEY}`,
       },
     });
 
+    console.log('Start response status:', startResponse.status);
+    
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
       console.error('iLovePDF start error:', startResponse.status, errorText);
