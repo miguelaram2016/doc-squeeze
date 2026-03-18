@@ -34,10 +34,13 @@ export async function POST(request: NextRequest) {
     };
     const compressionLevel = compressionMap[level] || 'recommended';
 
-    // If no API keys, fall back to pdf-lib
+    // If no API keys, return error
     if (!ILOVEPDF_PUBLIC_KEY || !ILOVEPDF_SECRET_KEY) {
-      log('No iLovePDF keys, using pdf-lib fallback');
-      return await compressWithPdfLib(file);
+      log('No iLovePDF keys configured!');
+      return NextResponse.json({
+        error: 'iLovePDF API keys not configured',
+        debug: debugLogs
+      }, { status: 500 });
     }
 
     log('=== iLovePDF COMPRESSION ATTEMPT ===');
@@ -159,56 +162,29 @@ export async function POST(request: NextRequest) {
 
     } catch (apiError: any) {
       log('=== iLovePDF API ERROR ===');
+      let errorDetails = '';
       if (apiError.response) {
-        log('Status: ' + apiError.response.status);
-        log('Data: ' + JSON.stringify(apiError.response.data).substring(0, 500));
+        errorDetails = 'Status: ' + apiError.response.status + ', Data: ' + JSON.stringify(apiError.response.data).substring(0, 500);
       } else if (apiError.request) {
-        log('No response received: ' + apiError.message);
+        errorDetails = 'No response: ' + apiError.message;
       } else {
-        log('Error: ' + apiError.message);
+        errorDetails = 'Error: ' + apiError.message;
       }
-      log('Falling back to pdf-lib...');
+      log(errorDetails);
       
-      // Return pdf-lib result but include debug info
-      const result = await compressWithPdfLib(file);
-      
-      // Add debug info to response headers
-      result.headers.set('X-Debug-Log', debugLogs.join(' | '));
-      return result;
+      // Return error with debug info instead of falling back
+      return NextResponse.json({
+        error: 'iLovePDF API failed: ' + errorDetails,
+        debug: debugLogs,
+        fallback: 'pdf-lib'
+      }, { status: 500 });
     }
 
   } catch (error) {
     log('Compression error: ' + (error instanceof Error ? error.message : String(error)));
-    return NextResponse.json(
-      { error: 'Failed to compress PDF. Check debug log header.' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: 'Failed to compress PDF',
+      debug: debugLogs
+    }, { status: 500 });
   }
-}
-
-// Fallback to pdf-lib compression
-async function compressWithPdfLib(file: File) {
-  const arrayBuffer = await file.arrayBuffer();
-  const originalSize = arrayBuffer.byteLength;
-  console.log('Using pdf-lib fallback, original size:', originalSize);
-
-  const { PDFDocument } = await import('pdf-lib');
-  const pdfDoc = await PDFDocument.load(arrayBuffer);
-  
-  const compressedPdfBytes = await pdfDoc.save({ useObjectStreams: true });
-  const buffer = Buffer.from(compressedPdfBytes);
-  const compressedSize = buffer.length;
-  const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
-
-  console.log('pdf-lib compression:', originalSize, '->', compressedSize, '(' + compressionRatio + '%)');
-
-  return new NextResponse(buffer, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
-      'X-Original-Size': originalSize.toString(),
-      'X-Compressed-Size': compressedSize.toString(),
-      'X-Compression-Ratio': compressionRatio,
-    },
-  });
 }
