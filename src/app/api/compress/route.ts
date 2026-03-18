@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
       );
       
       const token = authResponse.data.token;
-      log('Auth response: ' + JSON.stringify(authResponse.data).substring(0, 200));
+      log('Auth response received, token: ' + token?.substring(0, 20) + '...');
 
-      // Step 2: Get server and task from iLovePDF using the token
-      log('Step 2: Starting task...');
+      // Step 2: Get server and task from iLovePDF - try with region parameter
+      log('Step 2: Starting task (with region)...');
       const startResponse = await axios.get(
-        'https://api.ilovepdf.com/v1/start/compress',
+        'https://api.ilovepdf.com/v1/start/compress/us',
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -78,46 +78,45 @@ export async function POST(request: NextRequest) {
       );
       
       log('Start response status: ' + startResponse.status);
-      log('Start response data: ' + JSON.stringify(startResponse.data).substring(0, 200));
-      
       const { server, task } = startResponse.data;
       log('Server: ' + server + ', Task: ' + task);
 
       // Step 3: Upload file to the server
       log('Step 3: Uploading file...');
-      const FormData = (await import('form-data')).default;
-      const formData = new FormData();
-      formData.append('file', Buffer.from(fileBuffer), { filename: file.name, contentType: 'application/pdf' });
-      formData.append('task', task);
+      
+      // Create form data with the file
+      const uploadFormData = new FormData();
+      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      uploadFormData.append('file', blob, file.name);
+      uploadFormData.append('task', task);
 
       const uploadResponse = await axios.post(
         `https://${server}/v1/upload`,
-        formData,
+        uploadFormData,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
-            ...formData.getHeaders(),
           },
         }
       );
       
       log('Upload response status: ' + uploadResponse.status);
-      log('Upload response data: ' + JSON.stringify(uploadResponse.data).substring(0, 200));
-
       const { server_filename } = uploadResponse.data;
+      log('Server filename: ' + server_filename);
 
-      // Step 4: Process the file
+      // Step 4: Process the file - try with simpler parameters
       log('Step 4: Processing...');
       const processResponse = await axios.post(
         `https://${server}/v1/process`,
         {
-          task,
+          task: task,
           tool: 'compress',
-          files: [{
-            server_filename,
-            filename: file.name,
-          }],
-          compression_level: compressionLevel,
+          files: [
+            {
+              server_filename: server_filename,
+            }
+          ],
+          compression_level: compressionLevel
         },
         {
           headers: {
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
       );
       
       log('Process response status: ' + processResponse.status);
-      log('Process response data: ' + JSON.stringify(processResponse.data).substring(0, 200));
+      log('Process response data: ' + JSON.stringify(processResponse.data));
 
       // Step 5: Download the result
       log('Step 5: Downloading...');
@@ -172,7 +171,7 @@ export async function POST(request: NextRequest) {
       }
       log(errorDetails);
       
-      // Return error with debug info instead of falling back
+      // Return error with debug info
       return NextResponse.json({
         error: 'iLovePDF API failed: ' + errorDetails,
         debug: debugLogs,
