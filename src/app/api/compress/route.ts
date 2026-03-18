@@ -20,15 +20,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API key from environment
-    const apiKey = process.env.ILOVEPDF_API_KEY;
+    // Get API keys from environment
+    const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
+    const secretKey = process.env.ILOVEPDF_SECRET_KEY;
     
-    console.log('API Key present:', !!apiKey);
-    console.log('API Key value:', apiKey ? apiKey.substring(0, 10) + '...' : 'missing');
+    console.log('Public key present:', !!publicKey);
+    console.log('Secret key present:', !!secretKey);
     
-    if (!apiKey) {
+    if (!publicKey || !secretKey) {
       return NextResponse.json(
-        { error: 'API key not configured. Please set ILOVEPDF_API_KEY environment variable.' },
+        { error: 'API keys not configured. Please set ILOVEPDF_PUBLIC_KEY and ILOVEPDF_SECRET_KEY environment variables.' },
         { status: 500 }
       );
     }
@@ -36,40 +37,58 @@ export async function POST(request: NextRequest) {
     // Map compression levels to iLovePDF values
     const compressionMap: Record<string, string> = {
       'low': 'low',
-      'medium': 'medium', 
+      'medium': 'recommended', 
       'high': 'extreme'
     };
-    const compressionLevel = compressionMap[level] || 'medium';
+    const compressionLevel = compressionMap[level] || 'recommended';
 
     // Get file buffer
     const arrayBuffer = await file.arrayBuffer();
 
-    // iLovePDF REST API - Create task
-    // Try different endpoint formats
-    console.log('Creating task...');
-    
-    // Try the correct API endpoint - based on iLovePDF API structure
-    const createTaskResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
+    // Step 1: Authenticate to get JWT token
+    console.log('Authenticating...');
+    const authResponse = await fetch('https://api.ilovepdf.com/v1/auth', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ public_key: publicKey }),
+    });
+
+    console.log('Auth status:', authResponse.status, authResponse.statusText);
+    
+    if (!authResponse.ok) {
+      const errText = await authResponse.text();
+      console.error('Auth error:', errText);
+      throw new Error(`Authentication failed: ${errText}`);
+    }
+
+    const authData = await authResponse.json();
+    const token = authData.token;
+    console.log('Got JWT token:', token.substring(0, 20) + '...');
+
+    // Step 2: Start a new compress task
+    console.log('Starting task...');
+    const startResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
       },
     });
 
-    console.log('Create task status:', createTaskResponse.status, createTaskResponse.statusText);
+    console.log('Start task status:', startResponse.status, startResponse.statusText);
     
-    if (!createTaskResponse.ok) {
-      const errText = await createTaskResponse.text();
-      console.error('Create task error:', errText);
-      throw new Error(`Failed to create task: ${errText}`);
+    if (!startResponse.ok) {
+      const errText = await startResponse.text();
+      console.error('Start task error:', errText);
+      throw new Error(`Failed to start task: ${errText}`);
     }
 
-    const taskData = await createTaskResponse.json();
-    console.log('Task created:', JSON.stringify(taskData));
+    const taskData = await startResponse.json();
+    console.log('Task started:', JSON.stringify(taskData));
 
-    // Step 2: Upload the file using FormData
-    const uploadUrl = taskData.server + '/upload';
+    // Step 3: Upload the file using FormData
+    const uploadUrl = `https://${taskData.server}/v1/upload`;
     console.log('Upload URL:', uploadUrl);
     
     const uploadFormData = new FormData();
@@ -79,7 +98,7 @@ export async function POST(request: NextRequest) {
     const uploadResponse = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: uploadFormData,
     });
@@ -92,23 +111,30 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to upload file: ${errText}`);
     }
 
-    const uploadData = await uploadResponse.json();
-    console.log('File uploaded:', JSON.stringify(uploadData));
+    const uploadResult = await uploadResponse.json();
+    console.log('File uploaded:', JSON.stringify(uploadResult));
 
-    // Step 3: Process the file
-    const processUrl = taskData.server + '/process';
+    // Step 4: Process the file
+    const processUrl = `https://${taskData.server}/v1/process`;
     console.log('Process URL:', processUrl);
     const processResponse = await fetch(processUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         task: taskData.task,
+        tool: 'compress',
+        files: [{
+          server_filename: uploadResult.server_filename,
+          filename: file.name,
+        }],
         compression_level: compressionLevel,
       }),
     });
+
+    console.log('Process status:', processResponse.status, processResponse.statusText);
 
     if (!processResponse.ok) {
       const errText = await processResponse.text();
@@ -116,14 +142,16 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to process file: ${errText}`);
     }
 
-    const processData = await processResponse.json();
-    console.log('Processing complete:', processData);
+    const processResult = await processResponse.json();
+    console.log('Processing complete:', JSON.stringify(processResult));
 
-    // Step 4: Download the result
-    const downloadResponse = await fetch(taskData.server + '/download/' + taskData.task, {
+    // Step 5: Download the result
+    const downloadUrl = `https://${taskData.server}/v1/download/${taskData.task}`;
+    console.log('Download URL:', downloadUrl);
+    const downloadResponse = await fetch(downloadUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${token}`,
       },
     });
 
@@ -144,7 +172,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Compression error:', error);
     
-    // More detailed error message
     const errorMessage = error instanceof Error ? error.message : String(error);
     
     return NextResponse.json(
