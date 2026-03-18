@@ -6,6 +6,13 @@ const ILOVEPDF_PUBLIC_KEY = process.env.ILOVEPDF_PUBLIC_KEY;
 const ILOVEPDF_SECRET_KEY = process.env.ILOVEPDF_SECRET_KEY;
 
 export async function POST(request: NextRequest) {
+  const debugLogs: string[] = [];
+
+  const log = (msg: string) => {
+    debugLogs.push(msg);
+    console.log(msg);
+  };
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -29,21 +36,22 @@ export async function POST(request: NextRequest) {
 
     // If no API keys, fall back to pdf-lib
     if (!ILOVEPDF_PUBLIC_KEY || !ILOVEPDF_SECRET_KEY) {
-      console.log('No iLovePDF keys, using pdf-lib fallback');
+      log('No iLovePDF keys, using pdf-lib fallback');
       return await compressWithPdfLib(file);
     }
 
-    console.log('=== iLovePDF COMPRESSION ATTEMPT ===');
-    console.log('Compression level:', compressionLevel);
-    console.log('Public key starts with:', ILOVEPDF_PUBLIC_KEY?.substring(0, 15));
+    log('=== iLovePDF COMPRESSION ATTEMPT ===');
+    log('Compression level: ' + compressionLevel);
+    log('Public key starts with: ' + ILOVEPDF_PUBLIC_KEY?.substring(0, 15));
 
     const fileBuffer = await file.arrayBuffer();
     const originalSize = fileBuffer.byteLength;
+    log('File size: ' + originalSize);
 
     // Try iLovePDF REST API
     try {
       // Step 1: Request a JWT token from the auth endpoint
-      console.log('Step 1: Requesting auth token...');
+      log('Step 1: Requesting auth token...');
       const authResponse = await axios.post(
         'https://api.ilovepdf.com/v1/auth',
         { public_key: ILOVEPDF_PUBLIC_KEY },
@@ -53,10 +61,10 @@ export async function POST(request: NextRequest) {
       );
       
       const token = authResponse.data.token;
-      console.log('Auth response:', JSON.stringify(authResponse.data).substring(0, 200));
+      log('Auth response: ' + JSON.stringify(authResponse.data).substring(0, 200));
 
       // Step 2: Get server and task from iLovePDF using the token
-      console.log('Step 2: Starting task...');
+      log('Step 2: Starting task...');
       const startResponse = await axios.get(
         'https://api.ilovepdf.com/v1/start/compress',
         {
@@ -66,13 +74,14 @@ export async function POST(request: NextRequest) {
         }
       );
       
-      console.log('Start response status:', startResponse.status);
-      console.log('Start response data:', JSON.stringify(startResponse.data).substring(0, 200));
+      log('Start response status: ' + startResponse.status);
+      log('Start response data: ' + JSON.stringify(startResponse.data).substring(0, 200));
       
       const { server, task } = startResponse.data;
+      log('Server: ' + server + ', Task: ' + task);
 
       // Step 3: Upload file to the server
-      console.log('Step 3: Uploading file...');
+      log('Step 3: Uploading file...');
       const FormData = (await import('form-data')).default;
       const formData = new FormData();
       formData.append('file', Buffer.from(fileBuffer), { filename: file.name, contentType: 'application/pdf' });
@@ -89,13 +98,13 @@ export async function POST(request: NextRequest) {
         }
       );
       
-      console.log('Upload response status:', uploadResponse.status);
-      console.log('Upload response data:', JSON.stringify(uploadResponse.data).substring(0, 200));
+      log('Upload response status: ' + uploadResponse.status);
+      log('Upload response data: ' + JSON.stringify(uploadResponse.data).substring(0, 200));
 
       const { server_filename } = uploadResponse.data;
 
       // Step 4: Process the file
-      console.log('Step 4: Processing...');
+      log('Step 4: Processing...');
       const processResponse = await axios.post(
         `https://${server}/v1/process`,
         {
@@ -115,11 +124,11 @@ export async function POST(request: NextRequest) {
         }
       );
       
-      console.log('Process response status:', processResponse.status);
-      console.log('Process response data:', JSON.stringify(processResponse.data).substring(0, 200));
+      log('Process response status: ' + processResponse.status);
+      log('Process response data: ' + JSON.stringify(processResponse.data).substring(0, 200));
 
       // Step 5: Download the result
-      console.log('Step 5: Downloading...');
+      log('Step 5: Downloading...');
       const downloadResponse = await axios.get(
         `https://${server}/v1/download/${task}`,
         {
@@ -130,13 +139,13 @@ export async function POST(request: NextRequest) {
         }
       );
       
-      console.log('Download response status:', downloadResponse.status);
+      log('Download response status: ' + downloadResponse.status);
       
       const compressedBuffer = Buffer.from(downloadResponse.data);
       const compressedSize = compressedBuffer.length;
       const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
 
-      console.log('iLovePDF SUCCESS! Compression:', originalSize, '->', compressedSize, '(' + compressionRatio + '%)');
+      log('iLovePDF SUCCESS! Compression: ' + originalSize + ' -> ' + compressedSize + ' (' + compressionRatio + '%)');
 
       return new NextResponse(compressedBuffer, {
         headers: {
@@ -149,23 +158,31 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (apiError: any) {
-      console.error('=== iLovePDF API ERROR ===');
+      log('=== iLovePDF API ERROR ===');
       if (apiError.response) {
-        console.error('Status:', apiError.response.status);
-        console.error('Data:', JSON.stringify(apiError.response.data).substring(0, 500));
+        log('Status: ' + apiError.response.status);
+        log('Data: ' + JSON.stringify(apiError.response.data).substring(0, 500));
       } else if (apiError.request) {
-        console.error('No response received:', apiError.message);
+        log('No response received: ' + apiError.message);
       } else {
-        console.error('Error:', apiError.message);
+        log('Error: ' + apiError.message);
       }
-      console.log('Falling back to pdf-lib...');
-      return await compressWithPdfLib(file);
+      log('Falling back to pdf-lib...');
+      
+      // Return pdf-lib result but include debug info
+      const result = await compressWithPdfLib(file);
+      
+      // Add debug info to response headers
+      result.headers.set('X-Debug-Log', debugLogs.join(' | '));
+      return result;
     }
 
   } catch (error) {
-    console.error('Compression error:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: 'Failed to compress PDF. ' + errorMessage }, { status: 500 });
+    log('Compression error: ' + (error instanceof Error ? error.message : String(error)));
+    return NextResponse.json(
+      { error: 'Failed to compress PDF. Check debug log header.' },
+      { status: 500 }
+    );
   }
 }
 
