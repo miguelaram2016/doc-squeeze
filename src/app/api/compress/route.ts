@@ -40,17 +40,28 @@ export async function POST(request: NextRequest) {
     const fileBuffer = await file.arrayBuffer();
     const originalSize = fileBuffer.byteLength;
 
-    // Try iLovePDF REST API with axios (more reliable than fetch in Node.js)
+    // Try iLovePDF REST API
     try {
-      // Step 1: Get server and task from iLovePDF
-      console.log('Step 1: Starting task...');
-      const startResponse = await axios.post(
+      // Step 1: Request a JWT token from the auth endpoint
+      console.log('Step 1: Requesting auth token...');
+      const authResponse = await axios.post(
+        'https://api.ilovepdf.com/v1/auth',
+        { public_key: ILOVEPDF_PUBLIC_KEY },
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+      
+      const token = authResponse.data.token;
+      console.log('Auth response:', JSON.stringify(authResponse.data).substring(0, 200));
+
+      // Step 2: Get server and task from iLovePDF using the token
+      console.log('Step 2: Starting task...');
+      const startResponse = await axios.get(
         'https://api.ilovepdf.com/v1/start/compress',
-        {},
         {
           headers: {
-            'Authorization': `Bearer ${ILOVEPDF_PUBLIC_KEY}`,
-            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
         }
       );
@@ -60,8 +71,8 @@ export async function POST(request: NextRequest) {
       
       const { server, task } = startResponse.data;
 
-      // Step 2: Upload file to the server
-      console.log('Step 2: Uploading file...');
+      // Step 3: Upload file to the server
+      console.log('Step 3: Uploading file...');
       const FormData = (await import('form-data')).default;
       const formData = new FormData();
       formData.append('file', Buffer.from(fileBuffer), { filename: file.name, contentType: 'application/pdf' });
@@ -72,6 +83,7 @@ export async function POST(request: NextRequest) {
         formData,
         {
           headers: {
+            'Authorization': `Bearer ${token}`,
             ...formData.getHeaders(),
           },
         }
@@ -82,21 +94,22 @@ export async function POST(request: NextRequest) {
 
       const { server_filename } = uploadResponse.data;
 
-      // Step 3: Process the file
-      console.log('Step 3: Processing...');
+      // Step 4: Process the file
+      console.log('Step 4: Processing...');
       const processResponse = await axios.post(
         `https://${server}/v1/process`,
         {
           task,
           tool: 'compress',
-          compression_level: compressionLevel,
           files: [{
             server_filename,
             filename: file.name,
           }],
+          compression_level: compressionLevel,
         },
         {
           headers: {
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -105,12 +118,15 @@ export async function POST(request: NextRequest) {
       console.log('Process response status:', processResponse.status);
       console.log('Process response data:', JSON.stringify(processResponse.data).substring(0, 200));
 
-      // Step 4: Download the result
-      console.log('Step 4: Downloading...');
+      // Step 5: Download the result
+      console.log('Step 5: Downloading...');
       const downloadResponse = await axios.get(
         `https://${server}/v1/download/${task}`,
         {
           responseType: 'arraybuffer',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         }
       );
       
