@@ -38,109 +38,55 @@ export async function POST(request: NextRequest) {
       return await compressWithPdfLib(file);
     }
 
-    console.log('Using iLovePDF API with compression level:', compressionLevel);
+    console.log('Using iLovePDF SDK with compression level:', compressionLevel);
     console.log('Public key:', ILOVEPDF_PUBLIC_KEY?.substring(0, 20) + '...');
 
-    // Try iLovePDF REST API - let's try the simplest approach first
-    // Step 1: Start task with just public key as Bearer token
-    const startResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ILOVEPDF_PUBLIC_KEY}`,
-      },
-    });
+    // Try using the iLovePDF SDK
+    try {
+      const { default: ILovePDFApi } = await import('@ilovepdf/ilovepdf-js');
+      const instance = new ILovePDFApi(ILOVEPDF_PUBLIC_KEY);
+      
+      const task = instance.newTask('compress');
+      
+      // Start the task
+      await task.start();
+      
+      // Add the file - convert to base64 or use URL approach
+      const fileBuffer = await file.arrayBuffer();
+      const base64 = Buffer.from(fileBuffer).toString('base64');
+      const dataUrl = `data:application/pdf;base64,${base64}`;
+      
+      await task.addFile(dataUrl);
+      
+      // Process with compression level
+      await task.process({ compression_level: compressionLevel });
+      
+      // Download the result
+      const result = await task.download();
+      
+      // Convert Uint8Array to Buffer
+      const buffer = Buffer.from(result);
+      
+      const originalSize = fileBuffer.byteLength;
+      const compressedSize = buffer.length;
+      const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
 
-    console.log('Start response status:', startResponse.status);
-    
-    if (!startResponse.ok) {
-      const errorText = await startResponse.text();
-      console.error('iLovePDF start error:', startResponse.status, errorText);
-      // Fall back to pdf-lib
+      console.log('iLovePDF SDK compression:', originalSize, '->', compressedSize, '(' + compressionRatio + '%)');
+
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
+          'X-Original-Size': originalSize.toString(),
+          'X-Compressed-Size': compressedSize.toString(),
+          'X-Compression-Ratio': compressionRatio,
+        },
+      });
+    } catch (sdkError) {
+      console.error('iLovePDF SDK error:', sdkError);
       console.log('Falling back to pdf-lib');
       return await compressWithPdfLib(file);
     }
-
-    const startData = await startResponse.json();
-    console.log('Start response:', startData);
-
-    const { server, task } = startData;
-
-    // Step 2: Upload file
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-    
-    const uploadFormData = new FormData();
-    const blob = new Blob([fileBuffer]);
-    uploadFormData.append('file', blob, file.name);
-    uploadFormData.append('task', task);
-
-    const uploadResponse = await fetch(`https://${server}/v1/upload`, {
-      method: 'POST',
-      body: uploadFormData,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('iLovePDF upload error:', uploadResponse.status, errorText);
-      return await compressWithPdfLib(file);
-    }
-
-    const uploadData = await uploadResponse.json();
-    console.log('Upload response:', uploadData);
-
-    // Step 3: Process
-    const processResponse = await fetch(`https://${server}/v1/process`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        task,
-        tool: 'compress',
-        compression_level: compressionLevel,
-        files: [{
-          server_filename: uploadData.server_filename,
-          filename: file.name,
-        }],
-      }),
-    });
-
-    if (!processResponse.ok) {
-      const errorText = await processResponse.text();
-      console.error('iLovePDF process error:', processResponse.status, errorText);
-      return await compressWithPdfLib(file);
-    }
-
-    const processData = await processResponse.json();
-    console.log('Process response:', processData);
-
-    // Step 4: Download
-    const downloadResponse = await fetch(`https://${server}/v1/download/${task}`, {
-      method: 'GET',
-    });
-
-    if (!downloadResponse.ok) {
-      const errorText = await downloadResponse.text();
-      console.error('iLovePDF download error:', downloadResponse.status, errorText);
-      return await compressWithPdfLib(file);
-    }
-
-    const compressedBuffer = await downloadResponse.arrayBuffer();
-    const originalSize = fileBuffer.length;
-    const compressedSize = compressedBuffer.byteLength;
-    const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
-
-    console.log('iLovePDF compression:', originalSize, '->', compressedSize, '(' + compressionRatio + '%)');
-
-    return new NextResponse(compressedBuffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
-        'X-Original-Size': originalSize.toString(),
-        'X-Compressed-Size': compressedSize.toString(),
-        'X-Compression-Ratio': compressionRatio,
-      },
-    });
 
   } catch (error) {
     console.error('Compression error:', error);
