@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Polyfill XMLHttpRequest for server-side
+if (!global.XMLHttpRequest) {
+  // @ts-ignore
+  global.XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -44,173 +50,33 @@ export async function POST(request: NextRequest) {
 
     // Get file buffer
     const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    // Try authentication with secret key first (some APIs accept this directly)
-    console.log('Trying auth with secret key...');
+    console.log('Initializing iLovePDF with public key...');
     
-    // Step 1: Start a new compress task - try with secret key as Bearer
-    console.log('Starting task with secret key...');
-    const startResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${secretKey}`,
-      },
-    });
-
-    console.log('Start task status:', startResponse.status, startResponse.statusText);
+    // Use the SDK
+    const ILovePDF = require('@ilovepdf/ilovepdf-js');
+    const ilovepdf = new ILovePDF(publicKey, secretKey);
     
-    let taskData;
-    let token = secretKey; // Use secret key as token
+    console.log('Creating compress task...');
+    const task = ilovepdf.compress();
     
-    if (!startResponse.ok) {
-      const errText = await startResponse.text();
-      console.error('Start task with secret key failed:', errText);
-      
-      // Try with public key
-      console.log('Trying with public key...');
-      const startResponse2 = await fetch('https://api.ilovepdf.com/v1/start/compress', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${publicKey}`,
-        },
-      });
-      
-      console.log('Start task with public key status:', startResponse2.status, startResponse2.statusText);
-      
-      if (!startResponse2.ok) {
-        const errText2 = await startResponse2.text();
-        console.error('Start task with public key also failed:', errText2);
-        
-        // Try the /v1/auth endpoint one more time
-        console.log('Trying /v1/auth endpoint...');
-        const authResponse = await fetch('https://api.ilovepdf.com/v1/auth', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ public_key: publicKey }),
-        });
-
-        console.log('Auth status:', authResponse.status, authResponse.statusText);
-        
-        if (!authResponse.ok) {
-          const errText3 = await authResponse.text();
-          console.error('Auth error:', errText3);
-          throw new Error(`All auth methods failed. Last error: ${errText3}`);
-        }
-        
-        const authData = await authResponse.json();
-        token = authData.token;
-        console.log('Got JWT token from /v1/auth');
-      } else {
-        taskData = await startResponse2.json();
-        token = publicKey;
-      }
-    } else {
-      taskData = await startResponse.json();
-    }
+    console.log('Adding file to compress...');
+    // Add the file from buffer
+    task.addFile(buffer, { filename: file.name });
     
-    if (taskData) {
-      console.log('Task started:', JSON.stringify(taskData));
-    }
-
-    // If we got a token from /v1/auth, we need to start the task
-    if (!taskData && token) {
-      console.log('Getting task with token...');
-      const startResponse3 = await fetch('https://api.ilovepdf.com/v1/start/compress', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (!startResponse3.ok) {
-        const errText = await startResponse3.text();
-        console.error('Start task with token error:', errText);
-        throw new Error(`Failed to start task: ${errText}`);
-      }
-      
-      taskData = await startResponse3.json();
-      console.log('Task started with token:', JSON.stringify(taskData));
-    }
-
-    // Step 2: Upload the file using FormData
-    const uploadUrl = `https://${taskData.server}/v1/upload`;
-    console.log('Upload URL:', uploadUrl);
+    console.log('Processing...');
+    // Process with compression level
+    await task.process({ compression_level: compressionLevel });
     
-    const uploadFormData = new FormData();
-    uploadFormData.append('task', taskData.task);
-    uploadFormData.append('file', new Blob([arrayBuffer]), file.name);
+    console.log('Downloading...');
+    // Download the result
+    const resultBlob = await task.download();
     
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: uploadFormData,
-    });
-
-    console.log('Upload status:', uploadResponse.status, uploadResponse.statusText);
-
-    if (!uploadResponse.ok) {
-      const errText = await uploadResponse.text();
-      console.error('Upload error:', errText);
-      throw new Error(`Failed to upload file: ${errText}`);
-    }
-
-    const uploadResult = await uploadResponse.json();
-    console.log('File uploaded:', JSON.stringify(uploadResult));
-
-    // Step 3: Process the file
-    const processUrl = `https://${taskData.server}/v1/process`;
-    console.log('Process URL:', processUrl);
-    const processResponse = await fetch(processUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        task: taskData.task,
-        tool: 'compress',
-        files: [{
-          server_filename: uploadResult.server_filename,
-          filename: file.name,
-        }],
-        compression_level: compressionLevel,
-      }),
-    });
-
-    console.log('Process status:', processResponse.status, processResponse.statusText);
-
-    if (!processResponse.ok) {
-      const errText = await processResponse.text();
-      console.error('Process error:', errText);
-      throw new Error(`Failed to process file: ${errText}`);
-    }
-
-    const processResult = await processResponse.json();
-    console.log('Processing complete:', JSON.stringify(processResult));
-
-    // Step 4: Download the result
-    const downloadUrl = `https://${taskData.server}/v1/download/${taskData.task}`;
-    console.log('Download URL:', downloadUrl);
-    const downloadResponse = await fetch(downloadUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!downloadResponse.ok) {
-      const errText = await downloadResponse.text();
-      console.error('Download error:', errText);
-      throw new Error(`Failed to download result: ${errText}`);
-    }
-
-    const resultBuffer = await downloadResponse.arrayBuffer();
-
-    return new NextResponse(resultBuffer, {
+    console.log('Got result, size:', resultBlob.size);
+    
+    // Return the compressed file
+    return new NextResponse(resultBlob, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
