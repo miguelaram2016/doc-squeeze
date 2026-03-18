@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// Polyfill XMLHttpRequest for server-side
-if (!global.XMLHttpRequest) {
-  // @ts-ignore
-  global.XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
-}
+import { PDFDocument } from 'pdf-lib';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,60 +21,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API keys from environment
-    const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
-    const secretKey = process.env.ILOVEPDF_SECRET_KEY;
-    
-    console.log('Public key present:', !!publicKey);
-    console.log('Secret key present:', !!secretKey);
-    
-    if (!publicKey || !secretKey) {
-      return NextResponse.json(
-        { error: 'API keys not configured. Please set ILOVEPDF_PUBLIC_KEY and ILOVEPDF_SECRET_KEY environment variables.' },
-        { status: 500 }
-      );
-    }
-
-    // Map compression levels to iLovePDF values
-    const compressionMap: Record<string, string> = {
-      'low': 'low',
-      'medium': 'recommended', 
-      'high': 'extreme'
-    };
-    const compressionLevel = compressionMap[level] || 'recommended';
-
     // Get file buffer
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const originalSize = arrayBuffer.byteLength;
+    console.log('Original file size:', originalSize);
 
-    console.log('Initializing iLovePDF with public key...');
+    // Load the PDF
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
     
-    // Use the SDK
-    const ILovePDF = require('@ilovepdf/ilovepdf-js');
-    const ilovepdf = new ILovePDF(publicKey, secretKey);
+    // Save with compression
+    // useObjectStreams: true compresses the PDF by using object streams
+    const compressedPdfBytes = await pdfDoc.save({
+      useObjectStreams: true,
+    });
+
+    const compressedSize = compressedPdfBytes.byteLength;
+    const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
     
-    console.log('Creating compress task...');
-    const task = ilovepdf.compress();
-    
-    console.log('Adding file to compress...');
-    // Add the file from buffer
-    task.addFile(buffer, { filename: file.name });
-    
-    console.log('Processing...');
-    // Process with compression level
-    await task.process({ compression_level: compressionLevel });
-    
-    console.log('Downloading...');
-    // Download the result
-    const resultBlob = await task.download();
-    
-    console.log('Got result, size:', resultBlob.size);
-    
-    // Return the compressed file
-    return new NextResponse(resultBlob, {
+    console.log('Compressed size:', compressedSize);
+    console.log('Compression ratio:', compressionRatio + '%');
+
+    // Convert Uint8Array to Buffer for NextResponse
+    const buffer = Buffer.from(compressedPdfBytes);
+
+    return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
+        'X-Original-Size': originalSize.toString(),
+        'X-Compressed-Size': compressedSize.toString(),
+        'X-Compression-Ratio': compressionRatio,
       },
     });
   } catch (error) {
