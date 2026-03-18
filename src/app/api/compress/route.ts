@@ -45,49 +45,96 @@ export async function POST(request: NextRequest) {
     // Get file buffer
     const arrayBuffer = await file.arrayBuffer();
 
-    // Step 1: Authenticate to get JWT token
-    console.log('Authenticating...');
-    const authResponse = await fetch('https://api.ilovepdf.com/v1/auth', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ public_key: publicKey }),
-    });
-
-    console.log('Auth status:', authResponse.status, authResponse.statusText);
+    // Try authentication with secret key first (some APIs accept this directly)
+    console.log('Trying auth with secret key...');
     
-    if (!authResponse.ok) {
-      const errText = await authResponse.text();
-      console.error('Auth error:', errText);
-      throw new Error(`Authentication failed: ${errText}`);
-    }
-
-    const authData = await authResponse.json();
-    const token = authData.token;
-    console.log('Got JWT token:', token.substring(0, 20) + '...');
-
-    // Step 2: Start a new compress task
-    console.log('Starting task...');
+    // Step 1: Start a new compress task - try with secret key as Bearer
+    console.log('Starting task with secret key...');
     const startResponse = await fetch('https://api.ilovepdf.com/v1/start/compress', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${secretKey}`,
       },
     });
 
     console.log('Start task status:', startResponse.status, startResponse.statusText);
     
+    let taskData;
+    let token = secretKey; // Use secret key as token
+    
     if (!startResponse.ok) {
       const errText = await startResponse.text();
-      console.error('Start task error:', errText);
-      throw new Error(`Failed to start task: ${errText}`);
+      console.error('Start task with secret key failed:', errText);
+      
+      // Try with public key
+      console.log('Trying with public key...');
+      const startResponse2 = await fetch('https://api.ilovepdf.com/v1/start/compress', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${publicKey}`,
+        },
+      });
+      
+      console.log('Start task with public key status:', startResponse2.status, startResponse2.statusText);
+      
+      if (!startResponse2.ok) {
+        const errText2 = await startResponse2.text();
+        console.error('Start task with public key also failed:', errText2);
+        
+        // Try the /v1/auth endpoint one more time
+        console.log('Trying /v1/auth endpoint...');
+        const authResponse = await fetch('https://api.ilovepdf.com/v1/auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ public_key: publicKey }),
+        });
+
+        console.log('Auth status:', authResponse.status, authResponse.statusText);
+        
+        if (!authResponse.ok) {
+          const errText3 = await authResponse.text();
+          console.error('Auth error:', errText3);
+          throw new Error(`All auth methods failed. Last error: ${errText3}`);
+        }
+        
+        const authData = await authResponse.json();
+        token = authData.token;
+        console.log('Got JWT token from /v1/auth');
+      } else {
+        taskData = await startResponse2.json();
+        token = publicKey;
+      }
+    } else {
+      taskData = await startResponse.json();
+    }
+    
+    if (taskData) {
+      console.log('Task started:', JSON.stringify(taskData));
     }
 
-    const taskData = await startResponse.json();
-    console.log('Task started:', JSON.stringify(taskData));
+    // If we got a token from /v1/auth, we need to start the task
+    if (!taskData && token) {
+      console.log('Getting task with token...');
+      const startResponse3 = await fetch('https://api.ilovepdf.com/v1/start/compress', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (!startResponse3.ok) {
+        const errText = await startResponse3.text();
+        console.error('Start task with token error:', errText);
+        throw new Error(`Failed to start task: ${errText}`);
+      }
+      
+      taskData = await startResponse3.json();
+      console.log('Task started with token:', JSON.stringify(taskData));
+    }
 
-    // Step 3: Upload the file using FormData
+    // Step 2: Upload the file using FormData
     const uploadUrl = `https://${taskData.server}/v1/upload`;
     console.log('Upload URL:', uploadUrl);
     
@@ -114,7 +161,7 @@ export async function POST(request: NextRequest) {
     const uploadResult = await uploadResponse.json();
     console.log('File uploaded:', JSON.stringify(uploadResult));
 
-    // Step 4: Process the file
+    // Step 3: Process the file
     const processUrl = `https://${taskData.server}/v1/process`;
     console.log('Process URL:', processUrl);
     const processResponse = await fetch(processUrl, {
@@ -145,7 +192,7 @@ export async function POST(request: NextRequest) {
     const processResult = await processResponse.json();
     console.log('Processing complete:', JSON.stringify(processResult));
 
-    // Step 5: Download the result
+    // Step 4: Download the result
     const downloadUrl = `https://${taskData.server}/v1/download/${taskData.task}`;
     console.log('Download URL:', downloadUrl);
     const downloadResponse = await fetch(downloadUrl, {
