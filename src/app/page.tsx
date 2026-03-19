@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Speed, Sparkles, HelpCircle, ChevronDown } from 'lucide-react';
+import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Speed, Sparkles, HelpCircle, ChevronDown, Cloud, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -78,8 +78,31 @@ export default function Home() {
   const [result, setResult] = useState<CompressionResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [isWarmingUp, setIsWarmingUp] = useState(true);
+  const [isServiceReady, setIsServiceReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Preload/warmup Render API on page load
+  useEffect(() => {
+    const warmup = async () => {
+      try {
+        const response = await fetch('https://doc-squeeze-api.onrender.com/', {
+          method: 'GET',
+          cache: 'no-store'
+        });
+        if (response.ok) {
+          setIsServiceReady(true);
+        }
+      } catch {
+        // Silently fail - service might still be starting
+      } finally {
+        setIsWarmingUp(false);
+      }
+    };
+    warmup();
+  }, []);
 
   // Handle dark mode
   useEffect(() => {
@@ -209,6 +232,21 @@ export default function Home() {
     }
   };
 
+  const handleCopyLink = () => {
+    if (result) {
+      navigator.clipboard.writeText(result.fileName);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('Filename copied!');
+    }
+  };
+
+  const getEstimatedSavings = (level: CompressionLevel, size: number) => {
+    const multipliers = { low: 0.7, medium: 0.5, high: 0.3 };
+    const estimated = Math.round(size * multipliers[level]);
+    return formatFileSize(estimated);
+  };
+
   const getCompressionDescription = (level: CompressionLevel) => {
     switch (level) {
       case 'low':
@@ -230,7 +268,7 @@ export default function Home() {
       
       {/* Header */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25">
               <Zap className="w-5 h-5 text-white" />
@@ -240,14 +278,41 @@ export default function Home() {
               <p className="text-xs text-slate-500 dark:text-slate-400">Smart PDF Compression</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setDarkMode(!darkMode)}
-            className="rounded-full"
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Service Status */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+              isWarmingUp 
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' 
+                : isServiceReady 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+            }`}>
+              {isWarmingUp ? (
+                <>
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="hidden sm:inline">Warming up...</span>
+                </>
+              ) : isServiceReady ? (
+                <>
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="hidden sm:inline">Ready</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 bg-slate-400 rounded-full" />
+                  <span className="hidden sm:inline">Offline</span>
+                </>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setDarkMode(!darkMode)}
+              className="rounded-full"
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -358,6 +423,16 @@ export default function Home() {
                     <CardDescription>Choose how you want to compress your PDF</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    {/* Estimated Savings Preview */}
+                    <div className="p-4 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 rounded-xl">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-400">Estimated output size:</span>
+                        <span className="font-semibold text-violet-600 dark:text-violet-400">
+                          ~{file ? getEstimatedSavings(compressionLevel, file.size) : '—'}
+                        </span>
+                      </div>
+                    </div>
+
                     <div className="space-y-3">
                       <Label>Compression Level</Label>
                       <Select value={compressionLevel} onValueChange={(v) => setCompressionLevel(v as CompressionLevel)}>
@@ -477,8 +552,18 @@ export default function Home() {
             {/* Results Card */}
             <Card className="overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
-                <CardTitle>Compression Results</CardTitle>
-                <CardDescription className="text-violet-100">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Compression Results</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyLink}
+                    className="text-white hover:bg-white/20 h-8 px-2"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <CardDescription className="text-violet-100 truncate">
                   {result.fileName}
                 </CardDescription>
               </CardHeader>
