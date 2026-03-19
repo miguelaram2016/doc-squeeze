@@ -115,7 +115,9 @@ export default function Home() {
       formData.append('file', actualFile);
       formData.append('level', compressionLevel);
 
-      const response = await fetch('/api/compress', {
+      const API_URL = 'https://doc-squeeze-api.onrender.com';
+      
+      const response = await fetch(`${API_URL}/api/compress`, {
         method: 'POST',
         body: formData,
       });
