@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun } from 'lucide-react';
+import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Speed, Sparkles, HelpCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,6 +33,43 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+const features = [
+  {
+    icon: Speed,
+    title: 'Lightning Fast',
+    description: 'Compress your PDFs in seconds using powerful command-line tools.'
+  },
+  {
+    icon: Shield,
+    title: 'Secure & Private',
+    description: 'Your files are processed temporarily and never stored on our servers.'
+  },
+  {
+    icon: Sparkles,
+    title: 'High Quality',
+    description: 'Choose your compression level - from minimal to maximum reduction.'
+  }
+];
+
+const faqs = [
+  {
+    question: 'How does it work?',
+    answer: 'We use professional-grade PDF compression tools (qpdf and ghostscript) to reduce file size while maintaining compatibility and quality.'
+  },
+  {
+    question: 'Is my data safe?',
+    answer: 'Yes! Files are processed temporarily in memory and never stored on our servers. Once you download your compressed file, it\'s gone.'
+  },
+  {
+    question: 'What compression levels mean?',
+    answer: 'Low = Best quality, minimal compression. Medium = Balanced quality and size. High = Maximum compression, smaller file size but potentially lower quality.'
+  },
+  {
+    question: 'What file types are supported?',
+    answer: 'Currently, only PDF files (.pdf) are supported.'
+  }
+];
+
 export default function Home() {
   const [appState, setAppState] = useState<AppState>('upload');
   const [file, setFile] = useState<FileInfo | null>(null);
@@ -42,6 +79,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Handle dark mode
   useEffect(() => {
@@ -92,7 +130,6 @@ export default function Home() {
     setAppState('processing');
     setProgress(0);
 
-    // Simulate progress for UI feedback
     const progressInterval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 90) {
@@ -193,7 +230,7 @@ export default function Home() {
       
       {/* Header */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25">
               <Zap className="w-5 h-5 text-white" />
@@ -214,163 +251,219 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-12">
-        {/* Upload State */}
+      <main>
+        {/* Hero Section */}
         {appState === 'upload' && (
-          <div className="space-y-8">
+          <div className="space-y-12 py-16">
             {/* Hero */}
-            <div className="text-center space-y-4">
-              <h2 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
-                Compress PDFs with Ease
+            <div className="text-center space-y-6 max-w-3xl mx-auto px-4">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-700 dark:text-violet-300 text-sm font-medium">
+                <Sparkles className="w-4 h-4" />
+                100% Free • No Sign-up Required
+              </div>
+              <h2 className="text-5xl md:text-6xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Compress PDFs<br />
+                <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+                  Without Compromising Quality
+                </span>
               </h2>
-              <p className="text-lg text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                Reduce file size while maintaining quality. Fast, secure, and completely free.
+              <p className="text-xl text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
+                Reduce file size by up to 90% using professional-grade compression. 
+                Fast, secure, and works entirely in your browser.
               </p>
             </div>
 
-            {/* Dropzone */}
-            <Card className={`border-2 border-dashed transition-all duration-300 ${
-              isDragging 
-                ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30 scale-[1.02]' 
-                : 'border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-600'
-            }`}>
-              <CardContent className="p-8">
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="cursor-pointer"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  
-                  {file ? (
-                    <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                      <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                        <FileText className="w-6 h-6 text-red-600 dark:text-red-400" />
+            {/* Features */}
+            <div className="max-w-5xl mx-auto px-4">
+              <div className="grid md:grid-cols-3 gap-6">
+                {features.map((feature, i) => (
+                  <Card key={i} className="border-0 shadow-lg">
+                    <CardContent className="p-6 text-center space-y-4">
+                      <div className="w-14 h-14 bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-900/30 dark:to-indigo-900/30 rounded-2xl flex items-center justify-center mx-auto">
+                        <feature.icon className="w-7 h-7 text-violet-600 dark:text-violet-400" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 dark:text-white truncate">{file.name}</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{formatFileSize(file.size)}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReset();
-                        }}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <Upload className="w-8 h-8 text-violet-600 dark:text-violet-400" />
-                      </div>
-                      <p className="text-lg font-medium text-slate-900 dark:text-white mb-2">
-                        Drop your PDF here
-                      </p>
-                      <p className="text-slate-500 dark:text-slate-400">
-                        or click to browse files
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{feature.title}</h3>
+                      <p className="text-slate-600 dark:text-slate-400">{feature.description}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
 
-            {/* Compression Options (shown when file is selected) */}
-            {file && (
-              <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <CardHeader>
-                  <CardTitle className="text-lg">Compression Settings</CardTitle>
-                  <CardDescription>Choose how you want to compress your PDF</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Compression Level */}
-                  <div className="space-y-3">
-                    <Label>Compression Level</Label>
-                    <Select value={compressionLevel} onValueChange={(v) => setCompressionLevel(v as CompressionLevel)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Low</span>
-                            <span className="text-slate-500 text-sm">- Best quality</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="medium">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Medium</span>
-                            <span className="text-slate-500 text-sm">- Balanced</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="high">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">High</span>
-                            <span className="text-slate-500 text-sm">- Max compression</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {getCompressionDescription(compressionLevel)}
-                    </p>
-                  </div>
-
-                  <Button 
-                    onClick={handleCompress}
-                    className="w-full h-12 text-base bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25"
+            {/* Upload Section */}
+            <div className="max-w-2xl mx-auto px-4">
+              <Card className={`border-2 border-dashed transition-all duration-300 ${
+                isDragging 
+                  ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30 scale-[1.02]' 
+                  : 'border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-600'
+              }`}>
+                <CardContent className="p-8">
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="cursor-pointer"
                   >
-                    <Zap className="w-5 h-5 mr-2" />
-                    Compress PDF
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                    
+                    {file ? (
+                      <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+                          <FileText className="w-6 h-6 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 dark:text-white truncate">{file.name}</p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">{formatFileSize(file.size)}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReset();
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                          <Upload className="w-8 h-8 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <p className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                          Drop your PDF here
+                        </p>
+                        <p className="text-slate-500 dark:text-slate-400">
+                          or click to browse files
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
-            )}
+
+              {/* Compression Options */}
+              {file && (
+                <Card className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Compression Settings</CardTitle>
+                    <CardDescription>Choose how you want to compress your PDF</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-3">
+                      <Label>Compression Level</Label>
+                      <Select value={compressionLevel} onValueChange={(v) => setCompressionLevel(v as CompressionLevel)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Low</span>
+                              <span className="text-slate-500 text-sm">- Best quality</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Medium</span>
+                              <span className="text-slate-500 text-sm">- Balanced</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="high">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">High</span>
+                              <span className="text-slate-500 text-sm">- Max compression</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {getCompressionDescription(compressionLevel)}
+                      </p>
+                    </div>
+
+                    <Button 
+                      onClick={handleCompress}
+                      className="w-full h-12 text-base bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25"
+                    >
+                      <Zap className="w-5 h-5 mr-2" />
+                      Compress PDF
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* FAQ Section */}
+            <div className="max-w-3xl mx-auto px-4 py-12">
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-white text-center mb-8">
+                Frequently Asked Questions
+              </h3>
+              <div className="space-y-4">
+                {faqs.map((faq, i) => (
+                  <Card key={i} className="overflow-hidden">
+                    <button
+                      onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                      className="w-full p-4 flex items-center justify-between text-left"
+                    >
+                      <span className="font-medium text-slate-900 dark:text-white flex items-center gap-3">
+                        <HelpCircle className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                        {faq.question}
+                      </span>
+                      <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} />
+                    </button>
+                    {openFaq === i && (
+                      <div className="px-4 pb-4 pt-0 text-slate-600 dark:text-slate-400 ml-8">
+                        {faq.answer}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
         {/* Processing State */}
         {appState === 'processing' && (
-          <Card className="max-w-md mx-auto">
-            <CardContent className="p-8 text-center space-y-6">
-              <div className="relative w-24 h-24 mx-auto">
-                <div className="absolute inset-0 bg-violet-100 dark:bg-violet-900/30 rounded-full animate-pulse" />
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <Zap className="w-10 h-10 text-violet-600 animate-pulse" />
+          <div className="max-w-md mx-auto px-4 py-24">
+            <Card>
+              <CardContent className="p-8 text-center space-y-6">
+                <div className="relative w-24 h-24 mx-auto">
+                  <div className="absolute inset-0 bg-violet-100 dark:bg-violet-900/30 rounded-full animate-pulse" />
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <Zap className="w-10 h-10 text-violet-600 animate-pulse" />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                  Compressing your PDF
-                </h3>
-                <p className="text-slate-500 dark:text-slate-400">
-                  This usually takes a few seconds
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Progress value={progress} className="h-2" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">{progress}%</p>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    Compressing your PDF
+                  </h3>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    This usually takes a few seconds
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Progress value={progress} className="h-2" />
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{progress}%</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Result State */}
         {appState === 'result' && result && (
-          <div className="space-y-8 animate-in fade-in zoom-in duration-500">
+          <div className="space-y-8 py-16 max-w-lg mx-auto px-4 animate-in fade-in zoom-in duration-500">
             {/* Success Header */}
             <div className="text-center space-y-4">
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
@@ -440,8 +533,18 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 mt-20">
-        <div className="max-w-4xl mx-auto px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          <p>DocSqueeze - Fast & Secure PDF Compression</p>
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                <Zap className="w-4 h-4 text-white" />
+              </div>
+              <span className="font-semibold text-slate-900 dark:text-white">DocSqueeze</span>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Fast & Secure PDF Compression • Made with care
+            </p>
+          </div>
         </div>
       </footer>
     </div>
