@@ -288,7 +288,7 @@ export default function Home() {
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-1">
+          <nav className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-1 overflow-x-auto scrollbar-hide -mx-2 px-2">
             <Link href="/" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${pathname === '/' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
               <Gauge className="w-4 h-4" /> Compress
             </Link>
@@ -301,14 +301,16 @@ export default function Home() {
           </nav>
           <div className="flex items-center gap-3">
             {totalCompressed > 0 && (
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-full text-xs font-medium text-orange-700 dark:text-orange-400">
+              <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-full text-xs font-medium text-orange-700 dark:text-orange-400">
                 <HardDrive className="w-3.5 h-3.5" />
-                <span>{totalCompressed.toLocaleString()} compressed</span>
+                <span className="hidden sm:inline">{totalCompressed.toLocaleString()} compressed</span>
+                <span className="sm:hidden">{totalCompressed.toLocaleString()}</span>
               </div>
             )}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/20 rounded-full text-xs font-medium text-yellow-700 dark:text-yellow-400">
+            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/20 rounded-full text-xs font-medium text-yellow-700 dark:text-yellow-400">
               <Star className="w-3.5 h-3.5 fill-current" />
-              <span>4.8/5 (1,200+ users)</span>
+              <span className="hidden sm:inline">4.8/5 (1,200+ users)</span>
+              <span className="sm:hidden">4.8★</span>
             </div>
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${isWarmingUp ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : isServiceReady ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
               {isWarmingUp ? <><div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" /><span className="hidden sm:inline">Warming up...</span></> : isServiceReady ? <><div className="w-2 h-2 bg-green-500 rounded-full" /><span className="hidden sm:inline">Ready</span></> : <><div className="w-2 h-2 bg-slate-400 rounded-full" /><span className="hidden sm:inline">Offline</span></>}
