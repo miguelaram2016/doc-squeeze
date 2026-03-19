@@ -1,0 +1,9 @@
+node_modules
+.next
+.vercel
+.history
+.env*
+.eslintrc*
+.gitignore
+README.md
+doc-squeeze-native-toolchain.patch

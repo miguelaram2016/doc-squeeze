@@ -27,7 +27,7 @@ async function runGhostscript(input: string, output: string, level: string) {
 
   const quality = qualityMap[level] || '/ebook';
 
-  await execFileAsync('gswin64c', [
+  await execFileAsync('gs', [
     '-sDEVICE=pdfwrite',
     '-dCompatibilityLevel=1.4',
     `-dPDFSETTINGS=${quality}`,
