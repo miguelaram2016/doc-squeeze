@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Speed, Sparkles, HelpCircle, ChevronDown, Cloud, Copy, Check, Star, HardDrive, Trash2, Plus } from 'lucide-react';
+import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Gauge, Sparkles, HelpCircle, ChevronDown, Cloud, Copy, Check, Star, HardDrive, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,7 +45,7 @@ function generateId() {
 }
 
 const features = [
-  { icon: Speed, title: 'Lightning Fast', description: 'Compress your PDFs in seconds using powerful command-line tools.' },
+  { icon: Gauge, title: 'Lightning Fast', description: 'Compress your PDFs in seconds using powerful command-line tools.' },
   { icon: Shield, title: 'Secure & Private', description: 'Your files are processed temporarily and never stored on our servers.' },
   { icon: Sparkles, title: 'High Quality', description: 'Choose your compression level — from minimal to maximum reduction.' }
 ];
