@@ -269,6 +269,7 @@ export default function MergePage() {
 
                   {files.length > 0 && (
                     <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium px-1">Files will be merged in the order shown below — use ↑↓ to reorder</p>
                       {files.map((f, index) => (
                         <div key={f.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                           <div className="w-8 h-8 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center flex-shrink-0 text-violet-600 dark:text-violet-400 font-bold text-sm">

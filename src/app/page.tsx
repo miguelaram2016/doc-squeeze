@@ -73,6 +73,8 @@ export default function Home() {
   const [isWarmingUp, setIsWarmingUp] = useState(true);
   const [isServiceReady, setIsServiceReady] = useState(false);
   const [totalCompressed, setTotalCompressed] = useState(0);
+  const [processingPhase, setProcessingPhase] = useState<'upload' | 'compress' | 'download' | 'done'>('upload');
+  const [totalProgress, setTotalProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -149,7 +151,7 @@ export default function Home() {
 
   const handleCloudImport = (service: string) => toast.info(`${service} import coming soon!`);
 
-  const handleCompress = async () => {
+  const handleCompress = () => {
     if (files.length === 0) return;
 
     const statuses = new Map<string, FileStatus>();
@@ -157,60 +159,84 @@ export default function Home() {
     files.forEach(f => { statuses.set(f.id, 'compressing'); progress.set(f.id, 0); });
     setFileStatuses(statuses);
     setFileProgress(progress);
+    setTotalProgress(0);
+    setProcessingPhase('upload');
     setAppState('processing');
 
-    try {
-      const formData = new FormData();
-      files.forEach(f => formData.append('files', f.file));
-      formData.append('level', compressionLevel);
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f.file));
+    formData.append('level', compressionLevel);
 
-      const progressInterval = setInterval(() => {
-        setFileProgress(prev => {
-          const next = new Map(prev);
-          let updated = false;
-          next.forEach((val, key) => { if (val < 85) { next.set(key, val + 5); updated = true; } });
-          if (!updated) clearInterval(progressInterval);
-          return next;
-        });
-      }, 300);
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
 
-      const response = await fetch(`${API_URL}/api/batch-compress`, { method: 'POST', body: formData });
-      clearInterval(progressInterval);
-      setFileProgress(prev => { const next = new Map(prev); files.forEach(f => next.set(f.id, 100)); return next; });
+    const xhr = new XMLHttpRequest();
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Compression failed' }));
-        throw new Error(errorData.error || 'Compression failed');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        setProcessingPhase('upload');
+        const pct = Math.min(Math.round((e.loaded / totalSize) * 45), 45);
+        setTotalProgress(pct);
+        const newProgress = new Map<string, number>();
+        files.forEach(f => newProgress.set(f.id, pct));
+        setFileProgress(newProgress);
       }
+    };
 
-      const data = await response.json();
-      const processedResults: CompressionResult[] = [];
-      const newStatuses = new Map<string, FileStatus>();
+    xhr.onload = () => {
+      setProcessingPhase('done');
+      setTotalProgress(100);
+      const newProgress = new Map<string, number>();
+      files.forEach(f => newProgress.set(f.id, 100));
+      setFileProgress(newProgress);
 
-      for (const r of data.files) {
-        const fileId = files.find(f => f.name === r.originalName)?.id || generateId();
-        if (r.error) { newStatuses.set(fileId, 'error'); processedResults.push({ ...r, compressedBlob: undefined }); }
-        else {
-          const byteCharacters = atob(r.compressedBase64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-          const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
-          newStatuses.set(fileId, 'done');
-          processedResults.push({ ...r, compressedBlob: blob });
+      if (xhr.status !== 200) {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          toast.error(err.error || 'Compression failed');
+        } catch {
+          toast.error('Compression failed');
         }
+        setAppState('upload');
+        return;
       }
 
-      setResults(processedResults);
-      setFileStatuses(newStatuses);
-      setAppState('result');
-      toast.success(`${processedResults.filter(r => !r.error).length} file(s) compressed!`);
-    } catch (error) {
-      const newStatuses = new Map<string, FileStatus>();
-      files.forEach(f => newStatuses.set(f.id, 'error'));
-      setFileStatuses(newStatuses);
+      try {
+        const data = JSON.parse(xhr.responseText);
+        const processedResults: CompressionResult[] = [];
+        const newStatuses = new Map<string, FileStatus>();
+
+        for (const r of data.files) {
+          const fileId = files.find(f => f.name === r.originalName)?.id || generateId();
+          if (r.error) {
+            newStatuses.set(fileId, 'error');
+            processedResults.push({ ...r, compressedBlob: undefined });
+          } else {
+            const byteCharacters = atob(r.compressedBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+            const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+            newStatuses.set(fileId, 'done');
+            processedResults.push({ ...r, compressedBlob: blob });
+          }
+        }
+
+        setResults(processedResults);
+        setFileStatuses(newStatuses);
+        setAppState('result');
+        toast.success(`${processedResults.filter(r => !r.error).length} file(s) compressed!`);
+      } catch (parseErr) {
+        toast.error('Failed to parse response');
+        setAppState('upload');
+      }
+    };
+
+    xhr.onerror = () => {
+      toast.error('Network error during compression');
       setAppState('upload');
-      toast.error(error instanceof Error ? error.message : 'Failed to compress PDFs');
-    }
+    };
+
+    xhr.open('POST', `${API_URL}/api/batch-compress`);
+    xhr.send(formData);
   };
 
   const handleDownload = (result: CompressionResult) => {
@@ -230,7 +256,7 @@ export default function Home() {
   };
 
   const handleReset = () => {
-    setFiles([]); setResults([]); setFileStatuses(new Map()); setFileProgress(new Map()); setAppState('upload');
+    setFiles([]); setResults([]); setFileStatuses(new Map()); setFileProgress(new Map()); setTotalProgress(0); setProcessingPhase('upload'); setAppState('upload');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -457,13 +483,18 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Compressing {files.length} PDF{files.length > 1 ? 's' : ''}</h3>
-                  <p className="text-slate-500 dark:text-slate-400">Processing files — this may take a moment</p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    {files.length === 1 ? 'Compressing PDF' : `Compressing ${files.length} PDFs`}
+                  </h3>
+                  <p className="text-slate-500 dark:text-slate-400 capitalize">
+                    {processingPhase === 'upload' ? 'Uploading files...' : processingPhase === 'compress' ? 'Server-side compression...' : processingPhase === 'download' ? 'Downloading results...' : 'Done!'}
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Progress value={(doneCount / files.length) * 100} className="h-2" />
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{doneCount} of {files.length} complete</p>
+                <div className="space-y-2 max-w-xs mx-auto">
+                  <Progress value={totalProgress} className="h-3" />
+                  <p className="text-sm font-medium text-violet-600 dark:text-violet-400">{totalProgress}%</p>
                 </div>
+                <p className="text-xs text-slate-400">This may take a moment depending on file size</p>
               </CardContent>
             </Card>
           </div>

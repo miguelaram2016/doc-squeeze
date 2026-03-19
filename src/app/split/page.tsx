@@ -312,7 +312,7 @@ export default function SplitPage() {
                             <Scissors className="w-4 h-4 text-violet-600" />
                             <span className="font-medium text-slate-900 dark:text-white text-sm">All Pages</span>
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">Extract all pages as a single combined PDF</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Keep every page from the PDF</p>
                         </button>
                         <button
                           onClick={() => setSplitMode('custom')}
@@ -322,7 +322,7 @@ export default function SplitPage() {
                             <Sparkles className="w-4 h-4 text-violet-600" />
                             <span className="font-medium text-slate-900 dark:text-white text-sm">Custom Range</span>
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">Select specific pages or ranges</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Pick specific pages or ranges</p>
                         </button>
                       </div>
                     </div>
