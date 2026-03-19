@@ -66,7 +66,7 @@ export default function Home() {
   const [fileStatuses, setFileStatuses] = useState<Map<string, FileStatus>>(new Map());
   const [fileProgress, setFileProgress] = useState<Map<string, number>>(new Map());
   const [isDragging, setIsDragging] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState<boolean | undefined>(undefined);
   const [isWarmingUp, setIsWarmingUp] = useState(true);
   const [isServiceReady, setIsServiceReady] = useState(false);
   const [totalCompressed, setTotalCompressed] = useState(0);
@@ -92,10 +92,31 @@ export default function Home() {
     init();
   }, []);
 
+  // Detect system dark mode preference on mount
   useEffect(() => {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setDarkMode(prefersDark);
+    if (prefersDark) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, []);
+
+  // Sync dark mode class when toggled
+  useEffect(() => {
+    if (darkMode === undefined) return;
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
+
+  // Listen for system theme changes
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      const newDark = e.matches;
+      setDarkMode(newDark);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
@@ -450,17 +471,19 @@ export default function Home() {
                 return (
                   <Card key={i} className={`overflow-hidden ${!isDone ? 'opacity-60' : ''}`}>
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-900 dark:text-white truncate text-sm">{result.originalName}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {result.error ? result.error : `${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} (${savings}% smaller)`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-900 dark:text-white truncate text-sm">{result.originalName}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {result.error ? result.error : `${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} (${savings}% smaller)`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                           {!result.error && (
                             <div className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-full text-xs font-medium text-green-700 dark:text-green-400">
                               <Zap className="w-3 h-3" /> {savings}%
@@ -468,11 +491,11 @@ export default function Home() {
                           )}
                           {isDone && (
                             <>
-                              <Button variant="ghost" size="icon" onClick={() => handleCopyLink(result)} className="h-7 w-7">
+                              <Button variant="ghost" size="icon" onClick={() => handleCopyLink(result)} className="h-8 w-8">
                                 {copiedId === result.originalName ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
                               </Button>
-                              <Button size="sm" onClick={() => handleDownload(result)} className="h-8 bg-violet-600 hover:bg-violet-700">
-                                <Download className="w-3.5 h-3.5 mr-1" /> Download
+                              <Button size="sm" onClick={() => handleDownload(result)} className="bg-violet-600 hover:bg-violet-700 touch-manipulation min-w-[100px]">
+                                <Download className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Download</span><span className="sm:hidden">DL</span>
                               </Button>
                             </>
                           )}
@@ -495,14 +518,23 @@ export default function Home() {
 
       <footer className="border-t border-slate-200 dark:border-slate-800 mt-20">
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-white" />
+                </div>
+                <span className="font-semibold text-slate-900 dark:text-white">DocSqueeze</span>
               </div>
-              <span className="font-semibold text-slate-900 dark:text-white">DocSqueeze</span>
+              <div className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
+                <span>© {new Date().getFullYear()} DocSqueeze. All rights reserved.</span>
+              </div>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Fast & Secure PDF Compression • Made with care</p>
+            <div className="flex items-center gap-6 text-sm">
+              <a href="#" className="text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">Privacy Policy</a>
+              <a href="#" className="text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">Terms of Service</a>
+              <a href="#" className="text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">Contact</a>
+            </div>
           </div>
         </div>
       </footer>
