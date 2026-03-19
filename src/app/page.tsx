@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Gauge, Sparkles, HelpCircle, ChevronDown, Cloud, Copy, Check, Star, HardDrive, Trash2, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Upload, FileText, Download, Zap, CheckCircle, ArrowRight, RefreshCw, X, Moon, Sun, Shield, Gauge, Sparkles, HelpCircle, ChevronDown, Copy, Check, Star, HardDrive, Trash2, Plus, Files, Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -59,6 +61,7 @@ const faqs = [
 ];
 
 export default function Home() {
+  const pathname = usePathname();
   const [appState, setAppState] = useState<AppState>('upload');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
@@ -255,9 +258,21 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">DocSqueeze</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Smart PDF Compression</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">PDF Toolkit</p>
             </div>
           </div>
+
+          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-1">
+            <Link href="/" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${pathname === '/' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
+              <Gauge className="w-4 h-4" /> Compress
+            </Link>
+            <Link href="/merge" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${pathname === '/merge' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
+              <Files className="w-4 h-4" /> Merge
+            </Link>
+            <Link href="/split" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${pathname === '/split' ? 'bg-white dark:bg-slate-700 shadow-sm text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
+              <Scissors className="w-4 h-4" /> Split
+            </Link>
+          </nav>
           <div className="flex items-center gap-3">
             {totalCompressed > 0 && (
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-full text-xs font-medium text-orange-700 dark:text-orange-400">
