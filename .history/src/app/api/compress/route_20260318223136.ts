@@ -27,10 +27,10 @@ async function runGhostscript(input: string, output: string, level: string) {
 
   const quality = qualityMap[level] || '/ebook';
 
-  await execFileAsync('gswin64c', [
+  await execFileAsync('gs', [
     '-sDEVICE=pdfwrite',
     '-dCompatibilityLevel=1.4',
-    `-dPDFSETTINGS=${quality}`,
+    '-dPDFSETTINGS=' + quality,
     '-dNOPAUSE',
     '-dQUIET',
     '-dBATCH',
@@ -40,8 +40,6 @@ async function runGhostscript(input: string, output: string, level: string) {
 }
 
 export async function POST(req: NextRequest) {
-  let tmpDir = '';
-
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -51,20 +49,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 });
-    }
-
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docsqueeze-'));
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docsqueeze-'));
     const inputPath = path.join(tmpDir, 'input.pdf');
     const qpdfPath = path.join(tmpDir, 'qpdf.pdf');
     const outputPath = path.join(tmpDir, 'output.pdf');
 
     await fs.writeFile(inputPath, buffer);
 
+    // Step 1: lossless optimization
     await runQpdf(inputPath, qpdfPath);
+
+    // Step 2: real compression
     await runGhostscript(qpdfPath, outputPath, level);
 
     const result = await fs.readFile(outputPath);
@@ -75,17 +72,11 @@ export async function POST(req: NextRequest) {
         'Content-Disposition': `attachment; filename="compressed_${file.name}"`,
       },
     });
-  } catch (err) {
-    console.error('Compression error:', err);
+  } catch (err: unknown) {
+    console.error(err);
     return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : 'Compression failed',
-      },
+      { error: unknown.message || 'Compression failed' },
       { status: 500 }
     );
-  } finally {
-    if (tmpDir) {
-      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-    }
   }
 }

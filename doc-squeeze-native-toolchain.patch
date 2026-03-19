@@ -1,0 +1,658 @@
+diff --git a/README.md b/README.md
+index b97982e..1111111 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # DocSqueeze - Smart PDF Compression
+
+ <p align="center">
+-  <img src="https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js" alt="Next.js">
++  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js">
+   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript" alt="TypeScript">
+   <img src="img.shields.io/badge/Tailwind-38B2AC?style=for-the-badge&logo=tailwind-css" alt="Tailwind">
+   <img src="https://img.shields.io/badge/shadcn/ui-000000?style=for-the-badge" alt="shadcn/ui">
+@@ -18,18 +18,23 @@
+ - **Compression Levels** - Choose from Low, Medium, or High compression
+ - **Quality Control** - Fine-tune compression with quality slider
+ - **Real-time Stats** - See original size, compressed size, and savings
++- **Native Compression** - Uses qpdf and Ghostscript instead of third-party APIs
+ - **Modern UI** - Clean, professional design inspired by Squarespace/Wix
+ - **Responsive** - Works on desktop and mobile devices
+-- **Fast Processing** - Client-side file handling with server-side compression
+-- **Secure** - Files are processed temporarily and not stored
++- **Secure** - Files are processed temporarily and removed after compression
+
+ ## 🚀 Getting Started
+
+ ### Prerequisites
+
+ - Node.js 18+
++- qpdf
++- Ghostscript
+ - npm or yarn
++
++On macOS:
++```bash
++brew install qpdf ghostscript
++```
+
+ ### Installation
+
+@@ -43,8 +48,20 @@
+ # Install dependencies
+ npm install
+
++# Ensure native tools are installed and on PATH
++qpdf --version
++gs --version
++
+ # Start development server
+ npm run dev
++```
++
++On Ubuntu/Debian:
++
++```bash
++sudo apt-get update
++sudo apt-get install -y qpdf ghostscript
++npm install
++npm run dev
+ ```
+
+ Open [http://localhost:3000](http://localhost:3000) in your browser.
+@@ -61,7 +78,8 @@
+ - **Styling:** Tailwind CSS
+ - **Components:** shadcn/ui
+ - **Icons:** Lucide React
+-- **PDF Processing:** pdf-lib
++- **PDF Optimization:** qpdf
++- **PDF Compression:** Ghostscript
+
+ ## 📁 Project Structure
+
+@@ -70,13 +88,13 @@ doc-squeeze/
+ ├── src/
+ │   ├── app/
+ │   │   ├── api/
+-│   │   │   └── compress/       # Compression API endpoint
++│   │   │   └── compress/       # Native compression API endpoint
+ │   │   ├── globals.css         # Global styles
+ │   │   ├── layout.tsx          # Root layout
+ │   │   └── page.tsx            # Main page
+ │   ├── components/
+ │   │   └── ui/                 # shadcn/ui components
+-│   └── lib/
+-│       └── utils.ts            # Utility functions
++│   └── lib/
++│       └── utils.ts            # UI utility functions
+ ├── public/
+ ├── components.json              # shadcn configuration
+ ├── next.config.ts               # Next.js configuration
+@@ -91,11 +109,13 @@ Create a `.env.local` file for local development:
+ # Optional: Add any environment variables here
+ ```
+
++No third-party PDF API keys are required.
++
+ ## 📱 Usage
+
+ 1. **Upload a PDF** - Drag and drop or click to browse
+ 2. **Choose Compression Level** - Low (better quality), Medium (balanced), or High (smaller size)
+-3. **Adjust Quality** - Use the slider for fine-tuned control
++3. **Compress** - The server uses qpdf/Ghostscript based on your selected level
+ 4. **Compress** - Click the compress button
+ 5. **Download** - Get your compressed PDF
+
+@@ -115,5 +135,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
+
+ ## 🙏 Acknowledgments
+
++- [qpdf](https://qpdf.sourceforge.io/) for structural PDF optimization
++- [Ghostscript](https://ghostscript.com/) for native PDF compression
+ - [shadcn/ui](https://ui.shadcn.com) for the beautiful component library
+-- [pdf-lib](https://pdf-lib.js.org) for PDF manipulation
+ - [Lucide](https://lucide.dev) for icons
+diff --git a/package.json b/package.json
+index 4618f73..2222222 100644
+--- a/package.json
++++ b/package.json
+@@ -7,17 +7,12 @@
+     "start": "next start",
+     "lint": "eslint"
+   },
+   "dependencies": {
+-    "@adobe/pdfservices-node-sdk": "^4.1.0",
+     "@base-ui/react": "^1.3.0",
+-    "@ilovepdf/ilovepdf-js": "^0.3.0",
+-    "@ilovepdf/ilovepdf-js-core": "^0.3.2",
+     "class-variance-authority": "^0.7.1",
+     "clsx": "^2.1.1",
+-    "jsonwebtoken": "^9.0.3",
+     "lucide-react": "^0.577.0",
+     "next": "16.1.7",
+     "next-themes": "^0.4.6",
+-    "pdf-lib": "^1.17.1",
+     "react": "19.2.3",
+     "react-dom": "19.2.3",
+     "shadcn": "^4.0.8",
+@@ -25,8 +20,7 @@
+     "tailwind-merge": "^3.5.0",
+-    "tw-animate-css": "^1.4.0",
+-    "xmlhttprequest": "^1.8.0"
++    "tw-animate-css": "^1.4.0"
+   },
+   "devDependencies": {
+     "@tailwindcss/postcss": "^4",
+diff --git a/src/app/api/compress/route.ts b/src/app/api/compress/route.ts
+index a7ea12f..3333333 100644
+--- a/src/app/api/compress/route.ts
++++ b/src/app/api/compress/route.ts
+@@ -1,36 +1,182 @@
+ import { NextRequest, NextResponse } from 'next/server';
++import { promises as fs } from 'fs';
++import os from 'os';
++import path from 'path';
++import { spawn } from 'child_process';
++
++export const runtime = 'nodejs';
++
++type CompressionLevel = 'low' | 'medium' | 'high';
++
++function runCommand(command: string, args: string[]) {
++  return new Promise<void>((resolve, reject) => {
++    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
++    let stderr = '';
++
++    child.stderr.on('data', (chunk) => {
++      stderr += chunk.toString();
++    });
++
++    child.on('error', (error) => {
++      reject(error);
++    });
++
++    child.on('close', (code) => {
++      if (code === 0) {
++        resolve();
++        return;
++      }
++      reject(new Error(stderr || `${command} exited with code ${code}`));
++    });
++  });
++}
++
++async function firstAvailableCommand(candidates: string[]) {
++  for (const command of candidates) {
++    try {
++      await runCommand(command, ['--version']);
++      return command;
++    } catch {
++      // continue
++    }
++  }
++  return null;
++}
++
++async function compressPdf({
++  inputPath,
++  outputPath,
++  level,
++}: {
++  inputPath: string;
++  outputPath: string;
++  level: CompressionLevel;
++}) {
++  const qpdf = await firstAvailableCommand(['qpdf']);
++  const gs = await firstAvailableCommand(['gs', 'gswin64c', 'gswin32c']);
++
++  if (!qpdf) {
++    throw new Error('qpdf is not installed or not available on PATH');
++  }
++
++  const optimizedPath = path.join(path.dirname(outputPath), 'optimized.pdf');
++
++  await runCommand(qpdf, [
++    '--object-streams=generate',
++    '--recompress-flate',
++    '--compression-level=9',
++    '--optimize-images',
++    inputPath,
++    optimizedPath,
++  ]);
++
++  if (level === 'low') {
++    await fs.copyFile(optimizedPath, outputPath);
++    return;
++  }
++
++  if (!gs) {
++    throw new Error('Ghostscript is not installed or not available on PATH');
++  }
++
++  const pdfSetting = level === 'high' ? '/ebook' : '/printer';
++  const colorResolution = level === 'high' ? '110' : '150';
++  const grayResolution = level === 'high' ? '110' : '150';
++  const monoResolution = level === 'high' ? '200' : '300';
++
++  await runCommand(gs, [
++    '-sDEVICE=pdfwrite',
++    '-dCompatibilityLevel=1.6',
++    '-dNOPAUSE',
++    '-dBATCH',
++    '-dQUIET',
++    `-dPDFSETTINGS=${pdfSetting}`,
++    '-dDetectDuplicateImages=true',
++    '-dCompressFonts=true',
++    '-dSubsetFonts=true',
++    '-dDownsampleColorImages=true',
++    '-dColorImageDownsampleType=/Bicubic',
++    `-dColorImageResolution=${colorResolution}`,
++    '-dDownsampleGrayImages=true',
++    '-dGrayImageDownsampleType=/Bicubic',
++    `-dGrayImageResolution=${grayResolution}`,
++    '-dDownsampleMonoImages=true',
++    '-dMonoImageDownsampleType=/Subsample',
++    `-dMonoImageResolution=${monoResolution}`,
++    `-sOutputFile=${outputPath}`,
++    optimizedPath,
++  ]);
++}
+
+-// This API route is now a placeholder since we do client-side compression
+-// Kept for potential future use (e.g., advanced server-side compression)
++export async function GET() {
++  const qpdf = await firstAvailableCommand(['qpdf']);
++  const gs = await firstAvailableCommand(['gs', 'gswin64c', 'gswin32c']);
++
++  return NextResponse.json({
++    name: 'DocSqueeze API',
++    version: '2.0.0',
++    runtime: 'nodejs',
++    compression: 'native',
++    tools: {
++      qpdf: Boolean(qpdf),
++      ghostscript: Boolean(gs),
++    },
++  });
++}
+
+ export async function POST(request: NextRequest) {
++  let tempDir = '';
++
+   try {
+     const formData = await request.formData();
+     const file = formData.get('file') as File | null;
++    const level = ((formData.get('level') as string) || 'medium') as CompressionLevel;
+
+     if (!file) {
+       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+     }
+
+-    // Client-side compression is now the main method
+-    // This endpoint can be used for future server-side enhancements
+-    return NextResponse.json({ 
+-      message: 'Use client-side compression',
+-      status: 'ok' 
+-    });
++    if (file.type !== 'application/pdf') {
++      return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 });
++    }
++
++    if (!['low', 'medium', 'high'].includes(level)) {
++      return NextResponse.json({ error: 'Invalid compression level' }, { status: 400 });
++    }
++
++    const bytes = Buffer.from(await file.arrayBuffer());
++    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'doc-squeeze-'));
++
++    const inputPath = path.join(tempDir, file.name || 'input.pdf');
++    const outputPath = path.join(tempDir, 'compressed.pdf');
++
++    await fs.writeFile(inputPath, bytes);
++    await compressPdf({ inputPath, outputPath, level });
++
++    const compressed = await fs.readFile(outputPath);
++    const originalSize = bytes.length;
++    const compressedSize = compressed.length;
++    const compressionRatio = Math.max(
++      0,
++      Math.round((1 - compressedSize / Math.max(originalSize, 1)) * 100),
++    );
++
++    return new NextResponse(new Uint8Array(compressed), {
++      headers: {
++        'Content-Type': 'application/pdf',
++        'Content-Disposition': `attachment; filename="${file.name.replace(/\.pdf$/i, '')}_compressed.pdf"`,
++        'X-Original-Size': String(originalSize),
++        'X-Compressed-Size': String(compressedSize),
++        'X-Compression-Ratio': String(compressionRatio),
++      },
++    });
+
+   } catch (error) {
+     console.error('Error:', error);
+-    return NextResponse.json({ 
+-      error: 'Invalid request' 
+-    }, { status: 400 });
++    return NextResponse.json(
++      {
++        error: error instanceof Error ? error.message : 'Compression failed',
++      },
++      { status: 500 },
++    );
++  } finally {
++    if (tempDir) {
++      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
++    }
+   }
+ }
+-
+-export async function GET() {
+-  return NextResponse.json({ 
+-    name: 'DocSqueeze API',
+-    version: '1.0.0',
+-    compression: 'client-side'
+-  });
+-}
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index d9446e2..4444444 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -11,11 +11,12 @@ import { Toaster, toast } from 'sonner';
+ type CompressionLevel = 'low' | 'medium' | 'high';
+ type AppState = 'upload' | 'processing' | 'result';
+
+-interface FileInfo {
++interface SelectedFile {
++  file: File;
+   name: string;
+   size: number;
+-  originalSize: number;
+ }
++
+ interface CompressionResult {
+   originalSize: number;
+   compressedSize: number;
+@@ -24,6 +25,11 @@ interface CompressionResult {
+ }
+
+ function formatFileSize(bytes: number): string {
++  if (!Number.isFinite(bytes)) {
++    return '0 Bytes';
++  }
++  if (bytes < 0) return '0 Bytes';
++
+   if (bytes === 0) return '0 Bytes';
+   const k = 1024;
+   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+@@ -31,58 +37,13 @@ function formatFileSize(bytes: number): string {
+   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+ }
+
+-// Client-side PDF compression using pdf-lib and canvas
+-async function compressPdfClientSide(file: File, level: CompressionLevel): Promise<Blob> {
+-  // Dynamic import pdf-lib (works in browser)
+-  const { PDFDocument } = await import('pdf-lib');
+-  
+-  const arrayBuffer = await file.arrayBuffer();
+-  const pdfDoc = await PDFDocument.load(arrayBuffer);
+-  const pages = pdfDoc.getPages();
+-  
+-  // Set compression quality based on level
+-  let quality = 0.8;
+-  let scale = 1.0;
+-  
+-  switch (level) {
+-    case 'low':
+-      quality = 0.9;
+-      scale = 1.0;
+-      break;
+-    case 'medium':
+-      quality = 0.7;
+-      scale = 0.8;
+-      break;
+-    case 'high':
+-      quality = 0.5;
+-      scale = 0.5;
+-      break;
+-  }
+-  
+-  // Try to compress images in the PDF
+-  // Note: pdf-lib doesn't directly support image compression, but we can
+-  // save with optimization options
+-  const compressedPdfBytes = await pdfDoc.save({
+-    useObjectStreams: true,
+-    addDefaultPage: false,
+-  });
+-  
+-  // For better compression, we'd need to extract and re-compress images
+-  // That's complex - for now, let's try using the browser's compression
+-  
+-  // Create a new PDF with optimized settings
+-  const newPdfDoc = await PDFDocument.create();
+-  
+-  // Copy pages with potential optimization
+-  const copiedPages = await newPdfDoc.copyPages(pdfDoc, pages.map((_, i) => i));
+-  for (const page of copiedPages) {
+-    newPdfDoc.addPage(page);
+-  }
+-  
+-  // Save with compression
+-  // Convert Uint8Array to Buffer for Blob
+-  const compressedBytes = await newPdfDoc.save({
+-    useObjectStreams: true,
+-  });
+-  
+-  // Convert Uint8Array to ArrayBuffer then Blob  
+-  const uint8Arr = new Uint8Array(compressedBytes);
+-  const buf = uint8Arr.buffer.slice(uint8Arr.byteOffset, uint8Arr.byteOffset + uint8Arr.byteLength);
+-  return new Blob([buf], { type: 'application/pdf' });
++function downloadBlob(blob: Blob, fileName: string) {
++  const url = URL.createObjectURL(blob);
++  const a = document.createElement('a');
++  a.href = url;
++  a.download = fileName;
++  document.body.appendChild(a);
++  a.click();
++  document.body.removeChild(a);
++  URL.revokeObjectURL(url);
+ }
+
+ export default function Home() {
+   const [appState, setAppState] = useState<AppState>('upload');
+-  const [file, setFile] = useState<FileInfo | null>(null);
++  const [file, setFile] = useState<SelectedFile | null>(null);
+   const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
+   const [progress, setProgress] = useState(0);
+   const [result, setResult] = useState<CompressionResult | null>(null);
+@@ -90,6 +51,7 @@ export default function Home() {
+   const [darkMode, setDarkMode] = useState(false);
+   const fileInputRef = useRef<HTMLInputElement>(null);
++  const [toolStatus, setToolStatus] = useState<'checking' | 'ready' | 'missing'>('checking');
+
+   // Handle dark mode
+   useEffect(() => {
+@@ -100,6 +62,22 @@ export default function Home() {
+     }
+   }, [darkMode]);
+
++  useEffect(() => {
++    const checkTools = async () => {
++      try {
++        const response = await fetch('/api/compress');
++        const data = await response.json();
++        if (data?.tools?.qpdf && data?.tools?.ghostscript) {
++          setToolStatus('ready');
++        } else {
++          setToolStatus('missing');
++        }
++      } catch {
++        setToolStatus('missing');
++      }
++    };
++    checkTools();
++  }, []);
++
+   const handleDragOver = useCallback((e: React.DragEvent) => {
+     e.preventDefault();
+     setIsDragging(true);
+@@ -111,20 +89,34 @@ export default function Home() {
+     setIsDragging(false);
+   }, []);
+
++  const setSelectedFile = useCallback((incomingFile: File) => {
++    setFile({
++      file: incomingFile,
++      name: incomingFile.name,
++      size: incomingFile.size,
++    });
++  }, []);
++
+   const handleDrop = useCallback((e: React.DragEvent) => {
+     e.preventDefault();
+     setIsDragging(false);
+     const droppedFile = e.dataTransfer.files[0];
+     if (droppedFile && droppedFile.type === 'application/pdf') {
+-      setFile({
+-        name: droppedFile.name,
+-        size: droppedFile.size,
+-        originalSize: droppedFile.size,
+-      });
++      setSelectedFile(droppedFile);
++      if (fileInputRef.current) {
++        const dt = new DataTransfer();
++        dt.items.add(droppedFile);
++        fileInputRef.current.files = dt.files;
++      }
++    } else if (droppedFile) {
++      toast.error('Only PDF files are supported');
+     }
+-  }, []);
++  }, [setSelectedFile]);
+
+   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+     const selectedFile = e.target.files?.[0];
++    if (!selectedFile) return;
++
+     if (selectedFile && selectedFile.type === 'application/pdf') {
+-      setFile({
+-        name: selectedFile.name,
+-        size: selectedFile.size,
+-        originalSize: selectedFile.size,
+-      });
++      setSelectedFile(selectedFile);
++    } else {
++      toast.error('Only PDF files are supported');
+     }
+-  }, []);
++  }, [setSelectedFile]);
+
+   const handleCompress = async () => {
+     if (!file) return;
+@@ -146,25 +138,31 @@ export default function Home() {
+     }, 150);
+
+     try {
+-      // Get the actual file from the input
+-      const fileInput = fileInputRef.current;
+-      const actualFile = fileInput?.files?.[0];
+-      
+-      if (!actualFile) {
+-        throw new Error('No file selected');
+-      }
+-
+-      // Client-side compression
++      const formData = new FormData();
++      formData.append('file', file.file);
++      formData.append('level', compressionLevel);
+       setProgress(40);
+-      
+-      const compressedBlob = await compressPdfClientSide(actualFile, compressionLevel);
+-      
++
++      const response = await fetch('/api/compress', {
++        method: 'POST',
++        body: formData,
++      });
++
++      if (!response.ok) {
++        const errorData = await response.json().catch(() => ({ error: 'Compression failed' }));
++        throw new Error(errorData.error || 'Compression failed');
++      }
++
++      const compressedBlob = await response.blob();
+       setProgress(100);
+
++      const originalSize = Number(response.headers.get('X-Original-Size') || file.size);
++      const compressedSize = Number(response.headers.get('X-Compressed-Size') || compressedBlob.size);
++
+       setResult({
+-        originalSize: file.originalSize,
+-        compressedSize: compressedBlob.size,
++        originalSize,
++        compressedSize,
+         compressedBlob,
+-        fileName: file.name.replace('.pdf', '_compressed.pdf'),
++        fileName: file.name.replace(/\.pdf$/i, '_compressed.pdf'),
+       });
+
+       setAppState('result');
+@@ -177,12 +175,7 @@ export default function Home() {
+
+   const handleDownload = () => {
+     if (!result) return;
+-    const url = URL.createObjectURL(result.compressedBlob);
+-    const a = document.createElement('a');
+-    a.href = url;
+-    a.download = result.fileName;
+-    document.body.appendChild(a);
+-    a.click();
+-    document.body.removeChild(a);
+-    URL.revokeObjectURL(url);
++    downloadBlob(result.compressedBlob, result.fileName);
+   };
+
+   const handleReset = () => {
+@@ -223,7 +216,19 @@ export default function Home() {
+             </div>
+             <div>
+               <h1 className="text-xl font-bold text-slate-900 dark:text-white">DocSqueeze</h1>
+-              <p className="text-xs text-slate-500 dark:text-slate-400">Client-Side Compression</p>
++              <p className="text-xs text-slate-500 dark:text-slate-400">
++                Native PDF Compression
++              </p>
++              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
++                {toolStatus === 'checking' && 'Checking qpdf / Ghostscript…'}
++                {toolStatus === 'ready' && 'qpdf + Ghostscript ready'}
++                {toolStatus === 'missing' && 'Native tools missing'}
++              </p>
+             </div>
+           </div>
+           <Button
+@@ -246,7 +251,7 @@ export default function Home() {
+                 Compress PDFs with Ease
+               </h2>
+               <p className="text-lg text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+-                Reduce file size in your browser. Fast, secure, and private - your files never leave your device.
++                Reduce file size with a native qpdf + Ghostscript toolchain. Better than browser-only rewrites.
+               </p>
+             </div>
+
+@@ -363,7 +368,7 @@ export default function Home() {
+                   Compressing your PDF
+                 </h3>
+                 <p className="text-slate-500 dark:text-slate-400">
+-                  Processing in your browser - files never leave your device
++                  Running native compression on the server
+                 </p>
+               </div>
+               <div className="space-y-2">
+@@ -485,7 +490,7 @@ export default function Home() {
+       {/* Footer */}
+       <footer className="border-t border-slate-200 dark:border-slate-800 mt-20">
+         <div className="max-w-4xl mx-auto px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+-          <p>DocSqueeze - Client-Side PDF Compression • Your files never leave your device</p>
++          <p>DocSqueeze - Native PDF Compression with qpdf + Ghostscript</p>
+         </div>
+       </footer>
+     </div>
