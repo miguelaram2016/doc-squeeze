@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'sonner';
 
-type CompressionLevel = 'low' | 'medium' | 'high';
+type CompressionLevel = 'ultra' | 'high' | 'medium' | 'low' | 'minimal';
 type FileStatus = 'pending' | 'compressing' | 'done' | 'error';
 type AppState = 'upload' | 'processing' | 'result';
 
@@ -55,7 +55,7 @@ const features = [
 const faqs = [
   { question: 'How does it work?', answer: 'We use professional-grade PDF compression tools (qpdf and ghostscript) to reduce file size while maintaining compatibility and quality.' },
   { question: 'Is my data safe?', answer: "Yes! Files are processed temporarily in memory and never stored on our servers. Once you download your compressed file, it's gone." },
-  { question: 'What compression levels mean?', answer: 'Low = Best quality, minimal compression. Medium = Balanced quality and size. High = Maximum compression, smaller file size but potentially lower quality.' },
+  { question: 'What compression levels mean?', answer: 'Ultra = Maximum compression, smallest files. High = High compression, good quality. Medium = Balanced quality and size. Low = Low compression, high quality. Minimal = Best quality, minimal compression.' },
   { question: 'Can I compress multiple files at once?', answer: 'Yes! Select multiple PDF files to compress them all in one batch. Each file will be processed individually and you can download them one by one.' },
   { question: 'What file types are supported?', answer: 'Currently, only PDF files (.pdf) are supported.' }
 ];
@@ -64,7 +64,7 @@ export default function Home() {
   const pathname = usePathname();
   const [appState, setAppState] = useState<AppState>('upload');
   const [files, setFiles] = useState<FileInfo[]>([]);
-  const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
+  const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium'); // Default: balanced
   const [results, setResults] = useState<CompressionResult[]>([]);
   const [fileStatuses, setFileStatuses] = useState<Map<string, FileStatus>>(new Map());
   const [fileProgress, setFileProgress] = useState<Map<string, number>>(new Map());
@@ -261,9 +261,11 @@ export default function Home() {
   };
 
   const getCompressionDescription = (level: CompressionLevel) => {
-    if (level === 'low') return 'Minimal compression, best quality';
+    if (level === 'ultra') return 'Maximum compression, smallest file size (lower quality)';
+    if (level === 'high') return 'High compression, good quality';
     if (level === 'medium') return 'Balanced compression and quality';
-    return 'Maximum compression, lower quality';
+    if (level === 'low') return 'Low compression, high quality';
+    return 'Minimal compression, best quality';
   };
 
   const getCompressionRatio = (result: CompressionResult) =>
@@ -437,9 +439,11 @@ export default function Home() {
                       <Select value={compressionLevel} onValueChange={(v) => setCompressionLevel(v as CompressionLevel)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="low"><div className="flex items-center gap-2"><span className="font-medium">Low</span><span className="text-slate-500 text-sm">- Best quality</span></div></SelectItem>
+                          <SelectItem value="ultra"><div className="flex items-center gap-2"><span className="font-medium">Ultra</span><span className="text-slate-500 text-sm">- Max compression</span></div></SelectItem>
+                          <SelectItem value="high"><div className="flex items-center gap-2"><span className="font-medium">High</span><span className="text-slate-500 text-sm">- High compression</span></div></SelectItem>
                           <SelectItem value="medium"><div className="flex items-center gap-2"><span className="font-medium">Medium</span><span className="text-slate-500 text-sm">- Balanced</span></div></SelectItem>
-                          <SelectItem value="high"><div className="flex items-center gap-2"><span className="font-medium">High</span><span className="text-slate-500 text-sm">- Max compression</span></div></SelectItem>
+                          <SelectItem value="low"><div className="flex items-center gap-2"><span className="font-medium">Low</span><span className="text-slate-500 text-sm">- High quality</span></div></SelectItem>
+                          <SelectItem value="minimal"><div className="flex items-center gap-2"><span className="font-medium">Minimal</span><span className="text-slate-500 text-sm">- Best quality</span></div></SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-sm text-slate-500 dark:text-slate-400">{getCompressionDescription(compressionLevel)}</p>

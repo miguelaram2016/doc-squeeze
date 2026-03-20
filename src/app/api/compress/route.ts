@@ -20,9 +20,9 @@ async function runQpdf(input: string, output: string) {
 
 async function runGhostscript(input: string, output: string, level: string) {
   const qualityMap: Record<string, string> = {
-    low: '/printer',
-    medium: '/ebook',
-    high: '/screen',
+    low: '/prepress',
+    medium: '/printer',
+    high: '/ebook',
   };
 
   const quality = qualityMap[level] || '/ebook';
