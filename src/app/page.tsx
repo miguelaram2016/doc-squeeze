@@ -58,7 +58,7 @@ const faqs = [
   { question: 'What compression levels mean?', answer: 'Ultra = Maximum compression, smallest files. High = High compression, good quality. Medium = Balanced quality and size. Low = Low compression, high quality. Minimal = Best quality, minimal compression.' },
   { question: 'Can I compress multiple files at once?', answer: 'Yes! Select multiple PDF files to compress them all in one batch. Each file will be processed individually and you can download them one by one.' },
   { question: 'What file types are supported?', answer: 'Currently, only PDF files (.pdf) are supported.' },
-  { question: 'Why does compression vary?', answer: 'Compression effectiveness depends on the PDF content. Text-heavy PDFs may show similar results across all levels since text is already compressed. Image-heavy PDFs will show more noticeable differences between compression levels.' }
+  { question: 'Why does compression vary?', answer: 'Results depend on PDF content type. Text-heavy PDFs (forms, contracts) are often already compressed, so all levels give similar results. Image-heavy PDFs (scans, brochures) show more noticeable differences between levels, with higher compression producing smaller files but lower image quality.' }
 ];
 
 export default function Home() {
