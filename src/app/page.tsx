@@ -57,7 +57,8 @@ const faqs = [
   { question: 'Is my data safe?', answer: "Yes! Files are processed temporarily in memory and never stored on our servers. Once you download your compressed file, it's gone." },
   { question: 'What compression levels mean?', answer: 'Ultra = Maximum compression, smallest files. High = High compression, good quality. Medium = Balanced quality and size. Low = Low compression, high quality. Minimal = Best quality, minimal compression.' },
   { question: 'Can I compress multiple files at once?', answer: 'Yes! Select multiple PDF files to compress them all in one batch. Each file will be processed individually and you can download them one by one.' },
-  { question: 'What file types are supported?', answer: 'Currently, only PDF files (.pdf) are supported.' }
+  { question: 'What file types are supported?', answer: 'Currently, only PDF files (.pdf) are supported.' },
+  { question: 'Why does compression vary?', answer: 'Compression effectiveness depends on the PDF content. Text-heavy PDFs may show similar results across all levels since text is already compressed. Image-heavy PDFs will show more noticeable differences between compression levels.' }
 ];
 
 export default function Home() {
@@ -447,6 +448,7 @@ export default function Home() {
                         </SelectContent>
                       </Select>
                       <p className="text-sm text-slate-500 dark:text-slate-400">{getCompressionDescription(compressionLevel)}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">Note: Compression effectiveness varies by file type. Results may differ between files.</p>
                     </div>
                     <Button onClick={handleCompress} className="w-full h-12 text-base bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25">
                       <Zap className="w-5 h-5 mr-2" />
