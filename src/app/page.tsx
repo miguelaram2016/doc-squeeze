@@ -1,15 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { ArrowRight, Check, CheckCircle, ChevronDown, Copy, Download, FileText, Gauge, HelpCircle, Plus, RefreshCw, Shield, Sparkles, Trash2, Upload, X, Zap } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { ArrowRight, Check, CheckCircle, ChevronDown, Copy, Download, FileText, Files, Gauge, HardDrive, HelpCircle, Moon, Plus, RefreshCw, Scissors, Shield, Sparkles, Sun, Trash2, Upload, X, Zap } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Toaster, toast } from 'sonner';
+import { InfoStrip, SurfaceCard, ToolShell } from '@/components/tool-shell';
 import { API_BASE_URL } from '@/lib/config';
 
 type CompressionLevel = 'ultra' | 'high' | 'medium' | 'low' | 'minimal';
@@ -28,16 +28,16 @@ type CompressionResult = {
 type FileInfo = { id: string; name: string; size: number; originalSize: number; file: File };
 
 const features = [
-  { icon: Gauge, title: 'Simple controls', description: 'Pick a level, upload PDFs, and download each result.' },
-  { icon: Shield, title: 'Temporary processing', description: 'Files are sent to the configured DocSqueeze API for processing.' },
-  { icon: Sparkles, title: 'Honest trade-offs', description: 'Image-heavy PDFs usually shrink more than already-optimized text PDFs.' },
+  { icon: Gauge, title: 'Clear controls', description: 'Choose a compression level, upload PDFs, and get one downloadable result per file.' },
+  { icon: Shield, title: 'Honest processing', description: 'Files leave the browser and are processed by the configured DocSqueeze API.' },
+  { icon: Sparkles, title: 'Realistic savings', description: 'Image-heavy PDFs often shrink more than text-first or already-optimized documents.' },
 ];
 
 const faqs = [
-  { question: 'How does compression work?', answer: 'This frontend uploads your files to the DocSqueeze API, which performs the compression server-side.' },
-  { question: 'Is everything handled in the browser?', answer: 'No. This UI talks to a backend API. Do not assume fully local processing.' },
-  { question: 'Will every PDF shrink a lot?', answer: 'No. Scanned or image-heavy PDFs usually shrink more than text-first documents that are already optimized.' },
-  { question: 'Can I batch process files?', answer: 'Yes. Multiple PDFs can be uploaded and processed in one run, but each file is returned separately.' },
+  { question: 'Is compression local?', answer: 'No. This frontend uploads files to the configured API for processing, so treat it like a normal server-backed upload flow.' },
+  { question: 'Will every PDF get much smaller?', answer: 'No. Compression depends on how the original file was made. Scans and image-heavy PDFs usually see bigger savings.' },
+  { question: 'Can I upload a batch?', answer: 'Yes. You can compress multiple PDFs in one run, then download each result separately.' },
+  { question: 'What if something fails?', answer: 'A failed file stays labeled with an error message so you know it was not processed cleanly.' },
 ];
 
 function formatFileSize(bytes: number) {
@@ -91,8 +91,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
+    setDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
   }, []);
 
   useEffect(() => {
@@ -102,13 +101,17 @@ export default function Home() {
 
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
-    const nextFiles = Array.from(fileList)
-      .filter((file) => file.type === 'application/pdf')
-      .map((file) => ({ id: generateId(), name: file.name, size: file.size, originalSize: file.size, file }));
+
+    const accepted = Array.from(fileList).filter((file) => file.type === 'application/pdf');
+    const nextFiles = accepted.map((file) => ({ id: generateId(), name: file.name, size: file.size, originalSize: file.size, file }));
+    const rejectedCount = fileList.length - accepted.length;
 
     if (nextFiles.length > 0) {
       setFiles((prev) => [...prev, ...nextFiles]);
-      toast.success(`${nextFiles.length} file(s) added`);
+      toast.success(`${nextFiles.length} PDF${nextFiles.length > 1 ? 's' : ''} added`);
+    }
+    if (rejectedCount > 0) {
+      toast.error(`Skipped ${rejectedCount} non-PDF file${rejectedCount > 1 ? 's' : ''}`);
     }
   }, []);
 
@@ -217,55 +220,299 @@ export default function Home() {
   };
 
   const totalSavings = results.reduce((sum, result) => sum + (result.originalSize - result.compressedSize || 0), 0);
+  const completedCount = Array.from(fileStatuses.values()).filter((status) => status === 'done').length;
+  const hasErrors = results.some((result) => result.error);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
+    <ToolShell
+      pathname={pathname}
+      darkMode={darkMode}
+      onToggleDarkMode={() => setDarkMode((value) => !value)}
+      totalProcessed={totalProcessed}
+      isWarmingUp={isWarmingUp}
+      isServiceReady={isServiceReady}
+      badgeLabel="Batch PDF compression with realistic expectations"
+      title="Compress PDFs without the sketchy vibes"
+      subtitle="Upload one or more PDFs, choose a compression level, and download each result separately. This test frontend stays blunt about what happens: files are sent to the configured API for processing."
+    >
       <Toaster />
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center"><Zap className="w-5 h-5 text-white" /></div><div><h1 className="text-xl font-bold text-slate-900 dark:text-white">DocSqueeze</h1><p className="text-xs text-slate-500 dark:text-slate-400">PDF Toolkit</p></div></div>
-          <nav className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-1 overflow-x-auto">
-            <Link href="/" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Gauge className="w-4 h-4" /> Compress</Link>
-            <Link href="/merge" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/merge' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Files className="w-4 h-4" /> Merge</Link>
-            <Link href="/split" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/split' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Scissors className="w-4 h-4" /> Split</Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            {totalProcessed > 0 && <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 dark:bg-orange-900/20 text-xs text-orange-700 dark:text-orange-400"><HardDrive className="w-3.5 h-3.5" /> {totalProcessed.toLocaleString()} processed</div>}
-            <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${isWarmingUp ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : isServiceReady ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>{isWarmingUp ? 'Checking API...' : isServiceReady ? 'API ready' : 'API unavailable'}</div>
-            <Button variant="ghost" size="icon" onClick={() => setDarkMode((value) => !value)}>{darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</Button>
-          </div>
-        </div>
-      </header>
 
-      <main>
-        {appState === 'upload' && <div className="space-y-12 py-16"><div className="max-w-3xl mx-auto px-4 text-center space-y-6"><div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium"><Sparkles className="w-4 h-4" /> Free PDF compression with batch upload</div><h2 className="text-5xl md:text-6xl font-bold text-slate-900 dark:text-white tracking-tight">Compress PDFs<br /><span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">with honest expectations</span></h2><p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">Upload one or more PDFs, choose the level, and download each result separately. Savings depend heavily on the original file.</p></div>
+      {appState === 'upload' && (
+        <div className="space-y-10 pb-14">
+          <section className="mx-auto grid max-w-5xl gap-4 px-4 md:grid-cols-3">
+            {features.map((feature) => (
+              <Card key={feature.title} className="rounded-3xl border-slate-200/80 bg-white/85 shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+                <CardContent className="space-y-3 p-6 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300">
+                    <feature.icon className="h-7 w-7" />
+                  </div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{feature.title}</h2>
+                  <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{feature.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
 
-          <div className="max-w-5xl mx-auto px-4 grid md:grid-cols-3 gap-6">{features.map((feature) => <Card key={feature.title} className="border-0 shadow-lg"><CardContent className="p-6 text-center space-y-4"><div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-900/30 dark:to-indigo-900/30 flex items-center justify-center"><feature.icon className="w-7 h-7 text-violet-600 dark:text-violet-400" /></div><h3 className="text-lg font-semibold text-slate-900 dark:text-white">{feature.title}</h3><p className="text-slate-600 dark:text-slate-400">{feature.description}</p></CardContent></Card>)}</div>
+          <section className="mx-auto max-w-5xl px-4">
+            <div className="grid gap-6 lg:grid-cols-[1.45fr_.95fr]">
+              <SurfaceCard className="p-5 sm:p-6">
+                <div
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    setIsDragging(false);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setIsDragging(false);
+                    addFiles(event.dataTransfer.files);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`rounded-3xl border-2 border-dashed p-6 transition sm:p-8 ${
+                    isDragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-slate-200 bg-slate-50/60 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-950/30'
+                  } cursor-pointer`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    multiple
+                    onChange={(event) => {
+                      addFiles(event.target.files);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="hidden"
+                  />
 
-          <div className="max-w-2xl mx-auto px-4">
-            <Card className={`border-2 border-dashed ${isDragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
-              <CardContent className="p-8">
-                <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }} onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }} onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
-                  <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" multiple onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="hidden" />
-                  {files.length === 0 && <div className="text-center py-6"><div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Upload className="w-8 h-8 text-violet-600 dark:text-violet-400" /></div><p className="text-lg font-medium text-slate-900 dark:text-white mb-2">Drop your PDFs here</p><p className="text-slate-500 dark:text-slate-400">or click to browse — multiple files supported</p></div>}
+                  {files.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300">
+                        <Upload className="h-8 w-8" />
+                      </div>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white">Drop PDFs here or click to browse</p>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Multiple files are supported. Non-PDF files are skipped.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">Ready to upload</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">You can still add more PDFs before starting compression.</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); fileInputRef.current?.click(); }}>
+                          <Plus className="mr-1 h-4 w-4" /> Add files
+                        </Button>
+                      </div>
+
+                      <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                        {files.map((file) => {
+                          const status = fileStatuses.get(file.id) ?? 'pending';
+                          const progress = fileProgress.get(file.id) ?? 0;
+                          const result = results.find((item) => item.originalName === file.name);
+                          const ratio = result && !result.error ? Math.round((1 - result.compressedSize / result.originalSize) * 100) : 0;
+
+                          return (
+                            <div key={file.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 dark:bg-red-950/40">
+                                  <FileText className="h-5 w-5 text-red-600 dark:text-red-300" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{file.name}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {result && !result.error ? `${formatFileSize(result.compressedSize)} • ${ratio}% smaller` : formatFileSize(file.size)}
+                                  </p>
+                                  {status === 'compressing' && <Progress value={progress} className="mt-2 h-1.5" />}
+                                  {result?.error && <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{result.error}</p>}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {status === 'done' && <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/40"><Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" /></div>}
+                                  {status !== 'compressing' && (
+                                    <Button variant="ghost" size="icon-sm" onClick={(event) => { event.stopPropagation(); setFiles((prev) => prev.filter((item) => item.id !== file.id)); }}>
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {files.length > 0 && <div className="mt-4 space-y-3 max-h-72 overflow-y-auto">{files.map((file) => { const status = fileStatuses.get(file.id) ?? 'pending'; const progress = fileProgress.get(file.id) ?? 0; const result = results.find((item) => item.originalName === file.name); const ratio = result && !result.error ? Math.round((1 - result.compressedSize / result.originalSize) * 100) : 0; return <div key={file.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50"><div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center"><FileText className="w-5 h-5 text-red-600 dark:text-red-400" /></div><div className="flex-1 min-w-0"><p className="font-medium text-slate-900 dark:text-white truncate text-sm">{file.name}</p><p className="text-xs text-slate-500 dark:text-slate-400">{result && !result.error ? `${formatFileSize(result.compressedSize)} (${ratio}% smaller)` : formatFileSize(file.size)}</p>{status === 'compressing' && <Progress value={progress} className="h-1.5 mt-1.5" />}{result?.error && <p className="text-xs text-red-500 mt-1">{result.error}</p>}</div><div className="flex items-center gap-1">{status === 'done' && <div className="w-7 h-7 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"><Check className="w-4 h-4 text-green-600" /></div>}{status !== 'compressing' && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFiles((prev) => prev.filter((item) => item.id !== file.id))}><X className="w-3.5 h-3.5" /></Button>}</div></div>; })}</div>}
-              </CardContent>
-            </Card>
-            <div className="flex items-center gap-3 mt-4"><Button variant="outline" size="sm" onClick={() => toast.info('Google Drive import is not implemented in this frontend yet.')} className="flex-1">Google Drive</Button><Button variant="outline" size="sm" onClick={() => toast.info('Dropbox import is not implemented in this frontend yet.')} className="flex-1">Dropbox</Button><Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()}><Plus className="w-4 h-4" /></Button></div><p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Cloud import buttons are placeholders right now.</p>
+                <div className="mt-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Button variant="outline" className="justify-start" onClick={() => toast.info('Google Drive import is not built in this frontend yet.')}>Google Drive (soon)</Button>
+                    <Button variant="outline" className="justify-start" onClick={() => toast.info('Dropbox import is not built in this frontend yet.')}>Dropbox (soon)</Button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Those cloud import buttons are intentionally labeled as placeholders, not broken actions.</p>
+                </div>
+              </SurfaceCard>
 
-            {files.length > 0 && <Card className="mt-6"><CardHeader><div className="flex items-center justify-between"><div><CardTitle>Compression settings</CardTitle><CardDescription>{files.length} file{files.length > 1 ? 's' : ''} selected</CardDescription></div><Button variant="ghost" size="sm" onClick={resetAll}><Trash2 className="w-4 h-4 mr-1" /> Clear all</Button></div></CardHeader><CardContent className="space-y-6"><div className="space-y-3"><Label>Compression level</Label><Select value={compressionLevel} onValueChange={(value) => setCompressionLevel(value as CompressionLevel)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ultra">Ultra — maximum compression</SelectItem><SelectItem value="high">High — aggressive</SelectItem><SelectItem value="medium">Medium — balanced</SelectItem><SelectItem value="low">Low — better quality</SelectItem><SelectItem value="minimal">Minimal — smallest change</SelectItem></SelectContent></Select><p className="text-sm text-slate-500 dark:text-slate-400">Higher compression usually means smaller files and more visible quality trade-offs.</p></div><Button onClick={handleCompress} className="w-full h-12 text-base bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"><Zap className="w-5 h-5 mr-2" />{files.length === 1 ? 'Compress PDF' : `Compress ${files.length} PDFs`}<ArrowRight className="w-5 h-5 ml-2" /></Button></CardContent></Card>}
+              <div className="space-y-6">
+                <SurfaceCard className="p-5 sm:p-6">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Compression settings</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{files.length} file{files.length === 1 ? '' : 's'} selected</p>
+                    </div>
+                    {files.length > 0 && (
+                      <Button variant="ghost" size="sm" onClick={resetAll}>
+                        <Trash2 className="mr-1 h-4 w-4" /> Clear all
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Compression level</Label>
+                      <Select value={compressionLevel} onValueChange={(value) => setCompressionLevel(value as CompressionLevel)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ultra">Ultra — maximum compression</SelectItem>
+                          <SelectItem value="high">High — aggressive</SelectItem>
+                          <SelectItem value="medium">Medium — balanced</SelectItem>
+                          <SelectItem value="low">Low — higher visual quality</SelectItem>
+                          <SelectItem value="minimal">Minimal — smallest change</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">More compression usually means smaller files with more visible quality trade-offs.</p>
+                    </div>
+
+                    <InfoStrip>
+                      Start with <span className="font-medium text-slate-800 dark:text-white">Medium</span> unless you are testing for the smallest possible file size.
+                    </InfoStrip>
+
+                    <Button
+                      onClick={handleCompress}
+                      disabled={files.length === 0 || !isServiceReady || isWarmingUp}
+                      className="h-12 w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-base hover:from-violet-700 hover:to-indigo-700"
+                    >
+                      <Zap className="mr-2 h-5 w-5" />
+                      {files.length === 0 ? 'Add PDFs to continue' : files.length === 1 ? 'Compress PDF' : `Compress ${files.length} PDFs`}
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+
+                    {!isWarmingUp && !isServiceReady && (
+                      <p className="text-sm text-rose-600 dark:text-rose-300">The API is not reachable right now, so uploads are disabled until it comes back.</p>
+                    )}
+                  </div>
+                </SurfaceCard>
+
+                <SurfaceCard className="p-5 sm:p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">What to expect</h3>
+                  <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    <li>• Upload progress mostly reflects the trip to the API, not the full server-side work.</li>
+                    <li>• Each file is returned separately, so one bad file does not need to make the whole run feel mysterious.</li>
+                    <li>• If the backend fails, this frontend should say so plainly instead of pretending everything happened locally.</li>
+                  </ul>
+                </SurfaceCard>
+              </div>
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-3xl px-4 pt-2">
+            <h3 className="mb-5 text-center text-2xl font-semibold text-slate-900 dark:text-white">FAQs</h3>
+            <div className="space-y-3">
+              {faqs.map((faq, index) => (
+                <Card key={faq.question} className="rounded-2xl border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/80">
+                  <button className="flex w-full items-center justify-between gap-3 p-4 text-left" onClick={() => setOpenFaq(openFaq === index ? null : index)}>
+                    <span className="flex items-center gap-3 font-medium text-slate-900 dark:text-white"><HelpCircle className="h-5 w-5 text-violet-600 dark:text-violet-300" />{faq.question}</span>
+                    <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${openFaq === index ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openFaq === index && <div className="px-4 pb-4 pl-12 text-sm leading-6 text-slate-600 dark:text-slate-300">{faq.answer}</div>}
+                </Card>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {appState === 'processing' && (
+        <div className="mx-auto max-w-2xl px-4 py-20">
+          <SurfaceCard className="p-8 text-center">
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-950/40">
+              <Zap className="h-10 w-10 animate-pulse text-violet-600 dark:text-violet-300" />
+            </div>
+            <h2 className="mt-6 text-2xl font-semibold text-slate-900 dark:text-white">Compressing your PDFs</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Your files are on the way to the API and being processed there. Bigger or image-heavy PDFs can take noticeably longer.</p>
+            <Progress value={totalProgress} className="mt-6 h-3" />
+            <div className="mt-3 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>{completedCount} of {files.length} marked complete</span>
+              <span className="font-medium text-violet-600 dark:text-violet-300">{totalProgress}%</span>
+            </div>
+          </SurfaceCard>
+        </div>
+      )}
+
+      {appState === 'result' && results.length > 0 && (
+        <div className="mx-auto max-w-3xl space-y-6 px-4 py-14">
+          <SurfaceCard className="p-8 text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/40">
+              <CheckCircle className="h-10 w-10 text-emerald-600 dark:text-emerald-300" />
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 dark:text-white">Compression finished</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+              {totalSavings > 0 ? `Total saved: ${formatFileSize(totalSavings)}.` : 'Your files are ready.'} Download each result individually below.
+            </p>
+            {hasErrors && <p className="mt-2 text-sm text-amber-600 dark:text-amber-300">Some files returned errors. They are labeled clearly so you can retest them separately.</p>}
+          </SurfaceCard>
+
+          <div className="space-y-3">
+            {results.map((result) => {
+              const ratio = result.originalSize > 0 ? Math.round((1 - result.compressedSize / result.originalSize) * 100) : 0;
+              return (
+                <Card key={result.originalName} className="rounded-2xl border-slate-200/80 bg-white/95 dark:border-slate-800 dark:bg-slate-900/85">
+                  <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100 dark:bg-red-950/40">
+                        <FileText className="h-5 w-5 text-red-600 dark:text-red-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{result.originalName}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {result.error ? result.error : `${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} • ${ratio}% smaller`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!result.error && result.compressedBlob && (
+                      <div className="flex items-center gap-2 sm:ml-auto">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            navigator.clipboard.writeText(result.originalName.replace(/\.pdf$/i, '_compressed.pdf'));
+                            setCopiedId(result.originalName);
+                            setTimeout(() => setCopiedId(null), 1500);
+                          }}
+                          aria-label="Copy suggested filename"
+                        >
+                          {copiedId === result.originalName ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button size="sm" onClick={() => handleDownload(result)}>
+                          <Download className="mr-1 h-3.5 w-3.5" /> Download
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
-          <div className="max-w-3xl mx-auto px-4 py-12"><h3 className="text-3xl font-bold text-slate-900 dark:text-white text-center mb-8">Frequently asked questions</h3><div className="space-y-4">{faqs.map((faq, index) => <Card key={faq.question}><button className="w-full p-4 flex items-center justify-between text-left" onClick={() => setOpenFaq(openFaq === index ? null : index)}><span className="font-medium text-slate-900 dark:text-white flex items-center gap-3"><HelpCircle className="w-5 h-5 text-violet-600 dark:text-violet-400" />{faq.question}</span><ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${openFaq === index ? 'rotate-180' : ''}`} /></button>{openFaq === index && <div className="px-4 pb-4 ml-8 text-slate-600 dark:text-slate-400">{faq.answer}</div>}</Card>)}</div></div></div>}
-
-        {appState === 'processing' && <div className="max-w-2xl mx-auto px-4 py-24"><Card><CardContent className="p-8 text-center space-y-6"><div className="w-24 h-24 mx-auto rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Zap className="w-10 h-10 text-violet-600 animate-pulse" /></div><div className="space-y-2"><h3 className="text-xl font-semibold text-slate-900 dark:text-white">Compressing your PDFs</h3><p className="text-slate-500 dark:text-slate-400">Processing happens on the API, so larger files can take longer.</p></div><Progress value={totalProgress} className="h-3" /><p className="text-sm font-medium text-violet-600 dark:text-violet-400">{totalProgress}%</p></CardContent></Card></div>}
-
-        {appState === 'result' && results.length > 0 && <div className="space-y-8 py-16 max-w-2xl mx-auto px-4"><div className="text-center space-y-4"><div className="w-20 h-20 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"><CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" /></div><h2 className="text-3xl font-bold text-slate-900 dark:text-white">Compression complete</h2>{totalSavings > 0 && <p className="text-slate-500 dark:text-slate-400">Saved {formatFileSize(totalSavings)} total</p>}</div><div className="space-y-3">{results.map((result) => { const ratio = Math.round((1 - result.compressedSize / result.originalSize) * 100); return <Card key={result.originalName}><CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex items-center gap-3 flex-1 min-w-0"><div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center"><FileText className="w-5 h-5 text-red-600 dark:text-red-400" /></div><div className="min-w-0 flex-1"><p className="font-medium text-slate-900 dark:text-white truncate text-sm">{result.originalName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{result.error ? result.error : `${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} (${ratio}% smaller)`}</p></div></div>{!result.error && result.compressedBlob && <div className="flex items-center gap-2 ml-auto"><Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(result.originalName.replace(/\.pdf$/i, '_compressed.pdf')); setCopiedId(result.originalName); setTimeout(() => setCopiedId(null), 1500); }} >{copiedId === result.originalName ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}</Button><Button size="sm" onClick={() => handleDownload(result)}><Download className="w-3.5 h-3.5 mr-1" /> Download</Button></div>}</CardContent></Card>; })}</div><Button variant="outline" onClick={resetAll} className="w-full"><RefreshCw className="w-4 h-4 mr-2" /> Compress more files</Button></div>}
-      </main>
-
-      <footer className="border-t border-slate-200 dark:border-slate-800 mt-20"><div className="max-w-6xl mx-auto px-4 py-8 space-y-3"><div className="flex flex-col md:flex-row items-center justify-between gap-6"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center"><Zap className="w-4 h-4 text-white" /></div><span className="font-semibold text-slate-900 dark:text-white">DocSqueeze</span></div><div className="text-sm text-slate-500 dark:text-slate-400 text-center md:text-right">Privacy, terms, and contact pages are not published in this frontend yet.</div></div><p className="text-xs text-slate-400 dark:text-slate-500">API base URL: <code>{API_BASE_URL}</code>. Override with <code>NEXT_PUBLIC_DOCSQUEEZE_API_URL</code>.</p></div></footer>
-    </div>
+          <Button variant="outline" onClick={resetAll} className="h-11 w-full">
+            <RefreshCw className="mr-2 h-4 w-4" /> Compress more files
+          </Button>
+        </div>
+      )}
+    </ToolShell>
   );
 }

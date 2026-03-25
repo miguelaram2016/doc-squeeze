@@ -1,13 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { ArrowDown, ArrowUp, CheckCircle, Download, FileText, Files, Loader2, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { ArrowDown, ArrowUp, CheckCircle, Download, FileText, Files, Gauge, HardDrive, Loader2, Moon, Plus, RefreshCw, Scissors, Sun, Trash2, Upload, X, Zap } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Toaster, toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { InfoStrip, SurfaceCard, ToolShell } from '@/components/tool-shell';
 import { API_BASE_URL, getDownloadFilenameFromHeaders } from '@/lib/config';
 
 type AppState = 'upload' | 'processing' | 'result';
@@ -60,8 +60,7 @@ export default function MergePage() {
   }, []);
 
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
+    setDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
   }, []);
 
   useEffect(() => {
@@ -71,12 +70,15 @@ export default function MergePage() {
 
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
-    const nextFiles = Array.from(fileList)
-      .filter((file) => file.type === 'application/pdf')
-      .map((file) => ({ id: generateId(), name: file.name, size: file.size, file }));
+    const accepted = Array.from(fileList).filter((file) => file.type === 'application/pdf');
+    const nextFiles = accepted.map((file) => ({ id: generateId(), name: file.name, size: file.size, file }));
+    const rejectedCount = fileList.length - accepted.length;
     if (nextFiles.length > 0) {
       setFiles((prev) => [...prev, ...nextFiles]);
-      toast.success(`${nextFiles.length} file(s) added`);
+      toast.success(`${nextFiles.length} PDF${nextFiles.length > 1 ? 's' : ''} added`);
+    }
+    if (rejectedCount > 0) {
+      toast.error(`Skipped ${rejectedCount} non-PDF file${rejectedCount > 1 ? 's' : ''}`);
     }
   }, []);
 
@@ -121,14 +123,179 @@ export default function MergePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800"><Toaster />
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50"><div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center"><Zap className="w-5 h-5 text-white" /></div><div><h1 className="text-xl font-bold text-slate-900 dark:text-white">DocSqueeze</h1><p className="text-xs text-slate-500 dark:text-slate-400">PDF Toolkit</p></div></div><nav className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-1 overflow-x-auto"><Link href="/" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Gauge className="w-4 h-4" /> Compress</Link><Link href="/merge" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/merge' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Files className="w-4 h-4" /> Merge</Link><Link href="/split" className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${pathname === '/split' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-400'}`}><Scissors className="w-4 h-4" /> Split</Link></nav><div className="flex items-center gap-3">{totalProcessed > 0 && <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 dark:bg-orange-900/20 text-xs text-orange-700 dark:text-orange-400"><HardDrive className="w-3.5 h-3.5" /> {totalProcessed.toLocaleString()} processed</div>}<div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${isWarmingUp ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : isServiceReady ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>{isWarmingUp ? 'Checking API...' : isServiceReady ? 'API ready' : 'API unavailable'}</div><Button variant="ghost" size="icon" onClick={() => setDarkMode((value) => !value)}>{darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</Button></div></div></header>
-      <main>
-        {appState === 'upload' && <div className="space-y-12 py-16"><div className="max-w-3xl mx-auto px-4 text-center space-y-6"><div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium"><Files className="w-4 h-4" /> Merge PDFs in the order shown</div><h2 className="text-5xl md:text-6xl font-bold text-slate-900 dark:text-white tracking-tight">Merge PDFs<br /><span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">without mystery steps</span></h2><p className="text-xl text-slate-600 dark:text-slate-400 max-w-xl mx-auto">Add at least two PDFs, reorder them, and download one merged output when the API finishes.</p></div><div className="max-w-2xl mx-auto px-4"><Card className={`border-2 border-dashed ${isDragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-slate-200 dark:border-slate-700'}`}><CardContent className="p-8"><div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }} onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }} onClick={() => fileInputRef.current?.click()} className="cursor-pointer"><input ref={fileInputRef} type="file" accept=".pdf,application/pdf" multiple onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="hidden" />{files.length === 0 && <div className="text-center py-6"><div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Upload className="w-8 h-8 text-violet-600 dark:text-violet-400" /></div><p className="text-lg font-medium text-slate-900 dark:text-white mb-2">Drop your PDFs here</p><p className="text-slate-500 dark:text-slate-400">or click to browse — multiple files supported</p></div>}</div>{files.length > 0 && <div className="mt-4 space-y-3 max-h-80 overflow-y-auto"><p className="text-xs text-slate-500 dark:text-slate-400">The list order becomes the merge order.</p>{files.map((file, index) => <div key={file.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50"><div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold text-sm">{index + 1}</div><div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center"><FileText className="w-5 h-5 text-red-600 dark:text-red-400" /></div><div className="flex-1 min-w-0"><p className="font-medium text-slate-900 dark:text-white truncate text-sm">{file.name}</p><p className="text-xs text-slate-500 dark:text-slate-400">{formatFileSize(file.size)}</p></div><div className="flex items-center gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => setFiles((prev) => { const next = [...prev]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}><ArrowUp className="w-3.5 h-3.5" /></Button><Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === files.length - 1} onClick={() => setFiles((prev) => { const next = [...prev]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}><ArrowDown className="w-3.5 h-3.5" /></Button><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFiles((prev) => prev.filter((item) => item.id !== file.id))}><X className="w-3.5 h-3.5" /></Button></div></div>)}</div>}</CardContent></Card><div className="flex items-center gap-3 mt-4"><Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1"><Plus className="w-4 h-4 mr-2" /> Add more files</Button></div>{files.length > 1 && <Card className="mt-6"><CardHeader><div className="flex items-center justify-between"><div><CardTitle>Merge settings</CardTitle><CardDescription>{files.length} files • {formatFileSize(files.reduce((sum, file) => sum + file.size, 0))} total</CardDescription></div><Button variant="ghost" size="sm" onClick={resetAll}><Trash2 className="w-4 h-4 mr-1" /> Clear all</Button></div></CardHeader><CardContent className="space-y-4"><p className="text-sm text-slate-500 dark:text-slate-400">Output should be one merged PDF. If the backend sends a specific filename, the download button uses it.</p><Button onClick={handleMerge} className="w-full h-12 text-base bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"><Files className="w-5 h-5 mr-2" /> Merge {files.length} PDFs<Zap className="w-5 h-5 ml-2" /></Button></CardContent></Card>}</div></div>}
-        {appState === 'processing' && <div className="max-w-2xl mx-auto px-4 py-24"><Card><CardContent className="p-8 text-center space-y-6"><div className="w-24 h-24 mx-auto rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Loader2 className="w-10 h-10 text-violet-600 animate-spin" /></div><div className="space-y-2"><h3 className="text-xl font-semibold text-slate-900 dark:text-white">Merging your PDFs</h3><p className="text-slate-500 dark:text-slate-400">Processing happens on the API.</p></div><Progress value={processingProgress} className="h-2" /></CardContent></Card></div>}
-        {appState === 'result' && mergedBlob && <div className="max-w-2xl mx-auto px-4 py-16 space-y-8"><div className="text-center space-y-4"><div className="w-20 h-20 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"><CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" /></div><h2 className="text-3xl font-bold text-slate-900 dark:text-white">PDFs merged</h2><p className="text-slate-500 dark:text-slate-400">Your merged file is ready.</p></div><Card><CardContent className="p-6 flex items-center gap-4"><div className="w-14 h-14 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center"><FileText className="w-7 h-7 text-red-600 dark:text-red-400" /></div><div className="flex-1 min-w-0"><p className="font-semibold text-slate-900 dark:text-white truncate">{downloadName}</p><p className="text-sm text-slate-500 dark:text-slate-400">{formatFileSize(mergedBlob.size)}</p></div><Button onClick={() => { const url = URL.createObjectURL(mergedBlob); const a = document.createElement('a'); a.href = url; a.download = downloadName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }}><Download className="w-4 h-4 mr-2" /> Download</Button></CardContent></Card><Button variant="outline" onClick={resetAll} className="w-full"><RefreshCw className="w-4 h-4 mr-2" /> Merge more files</Button></div>}
-      </main>
-      <footer className="border-t border-slate-200 dark:border-slate-800 mt-20"><div className="max-w-6xl mx-auto px-4 py-8 space-y-3"><div className="flex flex-col md:flex-row items-center justify-between gap-6"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center"><Zap className="w-4 h-4 text-white" /></div><span className="font-semibold text-slate-900 dark:text-white">DocSqueeze</span></div><div className="text-sm text-slate-500 dark:text-slate-400 text-center md:text-right">Privacy, terms, and contact pages are not published in this frontend yet.</div></div><p className="text-xs text-slate-400 dark:text-slate-500">API base URL: <code>{API_BASE_URL}</code>. Override with <code>NEXT_PUBLIC_DOCSQUEEZE_API_URL</code>.</p></div></footer>
-    </div>
+    <ToolShell
+      pathname={pathname}
+      darkMode={darkMode}
+      onToggleDarkMode={() => setDarkMode((value) => !value)}
+      totalProcessed={totalProcessed}
+      isWarmingUp={isWarmingUp}
+      isServiceReady={isServiceReady}
+      badgeLabel="Merge PDFs in the order you see"
+      title="Merge PDFs with fewer rough edges"
+      subtitle="Add at least two PDFs, reorder them, and download one merged file when the API finishes. This page keeps the order and backend dependency obvious instead of hiding it."
+    >
+      <Toaster />
+
+      {appState === 'upload' && (
+        <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-14 lg:grid-cols-[1.4fr_1fr]">
+          <SurfaceCard className="p-5 sm:p-6">
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+                addFiles(event.dataTransfer.files);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer rounded-3xl border-2 border-dashed p-6 transition sm:p-8 ${
+                isDragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-slate-200 bg-slate-50/60 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-950/30'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                onChange={(event) => {
+                  addFiles(event.target.files);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="hidden"
+              />
+
+              {files.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300">
+                    <Upload className="h-8 w-8" />
+                  </div>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">Drop PDFs here or click to browse</p>
+                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">You need at least two PDFs before merge becomes available.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">Merge order</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Top to bottom becomes page order in the merged output.</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); fileInputRef.current?.click(); }}>
+                      <Plus className="mr-1 h-4 w-4" /> Add files
+                    </Button>
+                  </div>
+
+                  <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+                    {files.map((file, index) => (
+                      <Card key={file.id} className="rounded-2xl border-slate-200/80 bg-white/95 dark:border-slate-800 dark:bg-slate-900/80">
+                        <CardContent className="flex items-center gap-3 p-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-100 text-sm font-semibold text-violet-600 dark:bg-violet-950/50 dark:text-violet-300">{index + 1}</div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 dark:bg-red-950/40">
+                            <FileText className="h-5 w-5 text-red-600 dark:text-red-300" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{file.name}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{formatFileSize(file.size)}</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => setFiles((prev) => { const next = [...prev]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}><ArrowUp className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon-sm" disabled={index === files.length - 1} onClick={() => setFiles((prev) => { const next = [...prev]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}><ArrowDown className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon-sm" onClick={() => setFiles((prev) => prev.filter((item) => item.id !== file.id))}><X className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </SurfaceCard>
+
+          <div className="space-y-6">
+            <SurfaceCard className="p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Merge settings</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{files.length} file{files.length === 1 ? '' : 's'} selected</p>
+                </div>
+                {files.length > 0 && <Button variant="ghost" size="sm" onClick={resetAll}><Trash2 className="mr-1 h-4 w-4" /> Clear all</Button>}
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <InfoStrip>
+                  If the backend sends a filename, the download button will use it. Otherwise the fallback stays <span className="font-medium text-slate-800 dark:text-white">merged_document.pdf</span>.
+                </InfoStrip>
+                <InfoStrip>
+                  Merge is disabled until the API is reachable and you have at least two PDFs.
+                </InfoStrip>
+                <Button onClick={handleMerge} disabled={files.length < 2 || !isServiceReady || isWarmingUp} className="h-12 w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-base hover:from-violet-700 hover:to-indigo-700">
+                  <Files className="mr-2 h-5 w-5" />
+                  {files.length < 2 ? 'Add at least 2 PDFs' : `Merge ${files.length} PDFs`}
+                </Button>
+                {!isWarmingUp && !isServiceReady && <p className="text-sm text-rose-600 dark:text-rose-300">The merge API is not reachable right now.</p>}
+              </div>
+            </SurfaceCard>
+
+            <SurfaceCard className="p-5 sm:p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Before you test</h3>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                <li>• Reorder buttons are the source of truth for output order.</li>
+                <li>• The merge itself happens on the API, so upload time and server time are both part of the wait.</li>
+                <li>• This page is intentionally light on fake "AI" language. It just merges PDFs.</li>
+              </ul>
+            </SurfaceCard>
+          </div>
+        </div>
+      )}
+
+      {appState === 'processing' && (
+        <div className="mx-auto max-w-2xl px-4 py-20">
+          <SurfaceCard className="p-8 text-center">
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-950/40">
+              <Loader2 className="h-10 w-10 animate-spin text-violet-600 dark:text-violet-300" />
+            </div>
+            <h2 className="mt-6 text-2xl font-semibold text-slate-900 dark:text-white">Merging your PDFs</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">The upload and merge are happening against the configured API. Large files or lots of pages can take a minute.</p>
+            <Progress value={processingProgress} className="mt-6 h-3" />
+          </SurfaceCard>
+        </div>
+      )}
+
+      {appState === 'result' && mergedBlob && (
+        <div className="mx-auto max-w-2xl space-y-6 px-4 py-14">
+          <SurfaceCard className="p-8 text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/40">
+              <CheckCircle className="h-10 w-10 text-emerald-600 dark:text-emerald-300" />
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 dark:text-white">Merged file ready</h2>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">One merged PDF came back from the API. Download it below.</p>
+          </SurfaceCard>
+
+          <Card className="rounded-2xl border-slate-200/80 bg-white/95 dark:border-slate-800 dark:bg-slate-900/85">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 dark:bg-red-950/40">
+                  <FileText className="h-6 w-6 text-red-600 dark:text-red-300" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900 dark:text-white">{downloadName}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{formatFileSize(mergedBlob.size)}</p>
+                </div>
+              </div>
+              <Button onClick={() => { const url = URL.createObjectURL(mergedBlob); const a = document.createElement('a'); a.href = url; a.download = downloadName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }}>
+                <Download className="mr-2 h-4 w-4" /> Download
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Button variant="outline" onClick={resetAll} className="h-11 w-full"><RefreshCw className="mr-2 h-4 w-4" /> Merge more files</Button>
+        </div>
+      )}
+    </ToolShell>
   );
 }
